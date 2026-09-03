@@ -1,0 +1,327 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ----- Theme variables (light + dark). The same role name is reused
+       across themes so component classes do not branch by theme. ----- */
+@layer base {
+  /* Dark is the default so existing classes continue to work unchanged. */
+  :root {
+    color-scheme: dark;
+
+    /* Surfaces */
+    --bg-canvas: #0B0E14;
+    --bg-sidebar: #0F131B;
+    --bg-surface: #141925;
+    --bg-surface-2: #1A2030;
+    --bg-glass: rgba(20, 25, 37, 0.7);
+    --bg-overlay: rgba(0, 0, 0, 0.5);
+
+    /* Borders + grid */
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --grid-line: rgba(255, 255, 255, 0.04);
+
+    /* Text tiers */
+    --fg-primary: #E6E9F0;
+    --fg-secondary: #A4ACBD;
+    --fg-tertiary: #6B7388;
+
+    /* Brand + risk */
+    --accent: #7CE0C6;
+    --accent-soft: rgba(124, 224, 198, 0.18);
+    --accent-border: rgba(124, 224, 198, 0.4);
+    --accent-fg-on-bg: #04231C; /* dark text on accent green pill */
+
+    --risk-low: #5BB98B;
+    --risk-low-soft: rgba(91, 185, 139, 0.18);
+    --risk-low-border: rgba(91, 185, 139, 0.4);
+    --risk-low-fg-on-bg: #052013;
+
+    --risk-medium: #E4B14A;
+    --risk-medium-soft: rgba(228, 177, 74, 0.18);
+    --risk-medium-border: rgba(228, 177, 74, 0.4);
+    --risk-medium-fg-on-bg: #2A1B02;
+
+    --risk-high: #E26B6B;
+    --risk-high-soft: rgba(226, 107, 107, 0.18);
+    --risk-high-border: rgba(226, 107, 107, 0.4);
+    --risk-high-fg-on-bg: #2A0606;
+
+    /* Pipeline stage tokens (kept for backwards-compat in JSX strings) */
+    --stage-suggested: #8893A8;
+    --stage-pending: #E4B14A;
+    --stage-executing: #6FA8E6;
+    --stage-done: #5BB98B;
+    --stage-logged: #6B7388;
+
+    /* Button tokens — semantic pairs so fg never inherits surface.
+       Bumped contrast in dark mode so labels are always legible. */
+    --btn-primary-bg: #7CE0C6;
+    --btn-primary-bg-hover: #8FE9D2;
+    --btn-primary-fg: #04231C;
+    --btn-primary-border: transparent;
+
+    --btn-secondary-bg: #232B3F;
+    --btn-secondary-bg-hover: #2D354A;
+    --btn-secondary-fg: #E6E9F0;
+    --btn-secondary-border: rgba(255, 255, 255, 0.16);
+
+    --btn-ghost-bg: transparent;
+    --btn-ghost-bg-hover: rgba(255, 255, 255, 0.08);
+    --btn-ghost-fg: #C7CEDB;
+    --btn-ghost-fg-hover: #FFFFFF;
+    --btn-ghost-border: transparent;
+
+    --btn-danger-bg: rgba(226, 107, 107, 0.25);
+    --btn-danger-bg-hover: rgba(226, 107, 107, 0.4);
+    --btn-danger-fg: #FF9E9E;
+    --btn-danger-border: rgba(226, 107, 107, 0.55);
+
+    --btn-success-bg: #5BB98B;
+    --btn-success-bg-hover: #6CC79B;
+    --btn-success-fg: #052013;
+    --btn-success-border: transparent;
+
+    /* Per-agent colour families — used by AgentAvatar and the constellation. */
+    --agent-sales: #7CD3F0;
+    --agent-sales-bg: rgba(124, 211, 240, 0.16);
+    --agent-marketing: #F08CC2;
+    --agent-marketing-bg: rgba(240, 140, 194, 0.16);
+    --agent-inventory: #F0B97C;
+    --agent-inventory-bg: rgba(240, 185, 124, 0.16);
+    --agent-cx: #F091A1;
+    --agent-cx-bg: rgba(240, 145, 161, 0.16);
+    --agent-finance: #7CE0B8;
+    --agent-finance-bg: rgba(124, 224, 184, 0.16);
+    --agent-policy: #9BA4B5;
+    --agent-policy-bg: rgba(155, 164, 181, 0.16);
+    --agent-automation: #B79CF0;
+    --agent-automation-bg: rgba(183, 156, 240, 0.16);
+
+    /* Misc */
+    --focus-ring: #7CE0C6;
+    --selection-bg: rgba(124, 224, 198, 0.24);
+
+    /* Sparkline/chart defaults */
+    --chart-grid: rgba(255, 255, 255, 0.04);
+    --chart-axis: rgba(255, 255, 255, 0.08);
+
+    /* Constellation grid */
+    --world-dot: rgba(124, 224, 198, 0.18);
+  }
+
+  /* Light theme overrides — warm off-white surface + dark ink, same green (deepened) */
+  html.light {
+    color-scheme: light;
+
+    --bg-canvas: #F6F4EE;
+    --bg-sidebar: #EFEBE2;
+    --bg-surface: #FFFCF5;
+    --bg-surface-2: #EAE2D0;
+    --bg-glass: rgba(255, 252, 245, 0.7);
+    --bg-overlay: rgba(11, 14, 20, 0.45);
+
+    --border-subtle: rgba(11, 14, 20, 0.1);
+    --border-strong: rgba(11, 14, 20, 0.22);
+    --grid-line: rgba(11, 14, 20, 0.04);
+
+    --fg-primary: #14181F;
+    --fg-secondary: #3F4753;
+    --fg-tertiary: #6E7686;
+
+    --accent: #2F8C7A;          /* darkened green for AA contrast on light surfaces */
+    --accent-soft: rgba(47, 140, 122, 0.14);
+    --accent-border: rgba(47, 140, 122, 0.4);
+    --accent-fg-on-bg: #FFFFFF;
+
+    --risk-low: #2F7F5C;
+    --risk-low-soft: rgba(47, 127, 92, 0.16);
+    --risk-low-border: rgba(47, 127, 92, 0.4);
+    --risk-low-fg-on-bg: #FFFFFF;
+
+    --risk-medium: #9A6B12;
+    --risk-medium-soft: rgba(154, 107, 18, 0.14);
+    --risk-medium-border: rgba(154, 107, 18, 0.4);
+    --risk-medium-fg-on-bg: #FFFFFF;
+
+    --risk-high: #9B3030;
+    --risk-high-soft: rgba(155, 48, 48, 0.14);
+    --risk-high-border: rgba(155, 48, 48, 0.4);
+    --risk-high-fg-on-bg: #FFFFFF;
+
+    --stage-suggested: #5C6470;
+    --stage-pending: #9A6B12;
+    --stage-executing: #2F5DA0;
+    --stage-done: #2F7F5C;
+    --stage-logged: #5C6470;
+
+    --btn-primary-bg: #2F8C7A;
+    --btn-primary-bg-hover: #246D60;
+    --btn-primary-fg: #FFFFFF;
+    --btn-primary-border: transparent;
+
+    --btn-secondary-bg: #EAE2D0;
+    --btn-secondary-bg-hover: #DDD3BC;
+    --btn-secondary-fg: #14181F;
+    --btn-secondary-border: rgba(11, 14, 20, 0.18);
+
+    --btn-ghost-bg: transparent;
+    --btn-ghost-bg-hover: rgba(11, 14, 20, 0.06);
+    --btn-ghost-fg: #3F4753;
+    --btn-ghost-fg-hover: #14181F;
+    --btn-ghost-border: transparent;
+
+    --btn-danger-bg: rgba(155, 48, 48, 0.14);
+    --btn-danger-bg-hover: rgba(155, 48, 48, 0.24);
+    --btn-danger-fg: #8A2828;
+    --btn-danger-border: rgba(155, 48, 48, 0.5);
+
+    --btn-success-bg: #2F7F5C;
+    --btn-success-bg-hover: #266A4D;
+    --btn-success-fg: #FFFFFF;
+    --btn-success-border: transparent;
+
+    --agent-sales: #1F6A8C;
+    --agent-sales-bg: rgba(31, 106, 140, 0.14);
+    --agent-marketing: #A33D7E;
+    --agent-marketing-bg: rgba(163, 61, 126, 0.14);
+    --agent-inventory: #8C5A1F;
+    --agent-inventory-bg: rgba(140, 90, 31, 0.14);
+    --agent-cx: #8C2F3D;
+    --agent-cx-bg: rgba(140, 47, 61, 0.14);
+    --agent-finance: #1F6E4A;
+    --agent-finance-bg: rgba(31, 110, 74, 0.14);
+    --agent-policy: #4A5163;
+    --agent-policy-bg: rgba(74, 81, 99, 0.14);
+    --agent-automation: #5A3FA0;
+    --agent-automation-bg: rgba(90, 63, 160, 0.14);
+
+    --focus-ring: #2F8C7A;
+    --selection-bg: rgba(47, 140, 122, 0.24);
+
+    --chart-grid: rgba(11, 14, 20, 0.05);
+    --chart-axis: rgba(11, 14, 20, 0.1);
+    --world-dot: rgba(47, 140, 122, 0.18);
+  }
+
+  html, body {
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: Inter, "Hind Siliguri", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 460;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--selection-bg);
+  }
+
+  /* Reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .surface {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+  }
+  .surface-2 {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+  }
+  .glass {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 12px;
+  }
+  .hairline {
+    border-color: var(--border-subtle);
+  }
+  .mono-pill {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+  .kbd {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-subtle);
+  }
+  .grid-bg {
+    background-image:
+      radial-gradient(circle at 20% 10%, var(--accent-soft), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(111, 168, 230, 0.04), transparent 40%);
+  }
+
+  /* React Flow theming overrides — pull from CSS vars so light mode follows */
+  .react-flow__attribution { display: none; }
+  .react-flow__edge-path {
+    stroke: var(--border-strong);
+    stroke-width: 1;
+  }
+  .react-flow__edge.strong .react-flow__edge-path {
+    stroke: var(--accent);
+  }
+  .react-flow__handle { opacity: 0; }
+  .react-flow__node {
+    font-family: Inter, "Hind Siliguri", system-ui, sans-serif;
+  }
+  .react-flow__controls {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .react-flow__controls button {
+    background: var(--bg-surface-2);
+    color: var(--fg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .react-flow__controls button:hover {
+    background: var(--bg-surface);
+    color: var(--fg-primary);
+  }
+  .react-flow__background {
+    background-color: var(--bg-canvas);
+  }
+}
+
+/* Brain node focus ring applied briefly when arriving via deep link */
+.brain-node-focus .brain-entity-node,
+.brain-entity-node.brain-node-focus {
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent);
+  border-radius: 6px;
+}
+
+/* Tiny constellation grid used by the agents canvas */
+.constellation-grid {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(124, 224, 198, 0.05), transparent 55%),
+    var(--bg-canvas);
+}

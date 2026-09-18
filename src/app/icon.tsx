@@ -1,6 +1,6 @@
-// Dynamic Next.js favicon — renders the Thalamus brand glyph at the
+// Dynamic Next.js favicon — renders the BunonBrain brand glyph at the
 // canonical 32×32 size. Co-exists with /Thalamus_logo.png which we ship as
-// the larger branding asset.
+// a legacy asset until a BunonBrain logo is added.
 
 import { ImageResponse } from "next/og";
 

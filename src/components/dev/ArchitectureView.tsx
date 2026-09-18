@@ -8,22 +8,18 @@ import { motion } from "framer-motion";
 
 const LAYERS = [
   { id: 7, name: "Continuous Context", subtitle: "Each decision updates the Brain. Every approval rejects a stale assumption.", prototype: "Live", target: "Phoenix / LangSmith" },
-  { id: 6, name: "Action", subtitle: "Side-effects executed only after governance approves.", prototype: "Service layer", target: "LangGraph · Automation Agent" },
+  { id: 6, name: "Action", subtitle: "Side-effects executed only after governance approves.", prototype: "Service layer", target: "LangGraph · Manager Orchestrator" },
   { id: 5, name: "Governance", subtitle: "Risk tiering, approval gates, evidence store, audit log.", prototype: "Live (policy file)", target: "Guardrails AI · Open Policy Agent" },
-  { id: 4, name: "Dynamic Workforce", subtitle: "Seven sub-agents, each routed per config.", prototype: "Mock adapter", target: "LangGraph + LiteLLM" },
-  { id: 3, name: "Business Intelligence", subtitle: "Derived metrics, anomalies, evidence references.", prototype: "Live (derived from seed)", target: "LlamaIndex · derived graph" },
-  { id: 2, name: "Knowledge", subtitle: "Entities, edges, graph of the business.", prototype: "Live (React Flow)", target: "Neo4j + Qdrant" },
-  { id: 1, name: "Ingestion", subtitle: "Sources, object types, sync windows.", prototype: "Seeded", target: "Docling · Unstructured.io" }
+  { id: 4, name: "Dynamic Workforce", subtitle: "Three agents: line throughput, maintenance, manager orchestrator.", prototype: "Mock adapter", target: "LangGraph + LiteLLM" },
+  { id: 3, name: "Factory Intelligence", subtitle: "Derived line efficiency, machine health, energy use; anomaly references.", prototype: "Live (derived from seed)", target: "LlamaIndex · derived graph" },
+  { id: 2, name: "Knowledge", subtitle: "Entities, edges, graph of the factory floor.", prototype: "Live (React Flow)", target: "Neo4j + Qdrant" },
+  { id: 1, name: "Ingestion", subtitle: "RFID, machine telemetry, energy meter, plus legacy sources.", prototype: "Synthetic sensor stream", target: "Docling · Unstructured.io" }
 ] as const;
 
 const ROUTING = [
-  { agent: "Sales Analyst", tier: "Mid", risk: "Low", execution: "Auto" },
-  { agent: "Marketing Agent", tier: "Strong creative", risk: "Medium", execution: "Approval" },
-  { agent: "Inventory Agent", tier: "Structured + stats", risk: "Medium", execution: "Threshold-gated" },
-  { agent: "Customer Success", tier: "Mid", risk: "Low", execution: "Auto (read-only)" },
-  { agent: "Finance Agent", tier: "Frontier", risk: "High", execution: "Always approval" },
-  { agent: "Policy & Docs Agent", tier: "Frontier long-context", risk: "High", execution: "Always approval" },
-  { agent: "Automation Agent", tier: "Tool-reliable", risk: "Per policy", execution: "Per policy" }
+  { agent: "Line Throughput", tier: "Mid", risk: "Low", execution: "Auto" },
+  { agent: "Maintenance & Uptime", tier: "Mid", risk: "Medium", execution: "Auto-suggest + threshold" },
+  { agent: "Manager Orchestrator", tier: "Frontier", risk: "Low", execution: "Auto (routing + brief)" }
 ];
 
 export function ArchitectureView() {
@@ -33,7 +29,7 @@ export function ArchitectureView() {
       <Link href="/app" className="inline-flex items-center gap-1 text-caption text-fg-tertiary hover:text-fg-primary mb-6">
         <ArrowLeft size={12} /> Back to app
       </Link>
-      <h1 className="text-display font-semibold tracking-tight">Architecture (internal)</h1>
+      <h1 className="text-display font-semibold tracking-tight">BunonBrain architecture (internal)</h1>
       <p className="mt-1 text-caption text-fg-tertiary max-w-2xl">
         Production design from the whitepaper. The current prototype boundary is drawn on each layer.
       </p>

@@ -19,8 +19,15 @@ const { orders, byDay } = buildOrders(customers, products);
 const inventory = buildInventory(products, orders);
 const health = computeHealth(orders, byDay, customers, inventory);
 const insights = buildInsights(health, inventory, products, customers, orders);
-const graph = buildGraph(products, customers, suppliers, orders, goals);
 const activity = buildActivity();
+
+// Graph is lazy because buildGraph() touches the client-side factory store.
+// Server routes that never read `dataset.graph` should not pay for the import.
+let _graph: ReturnType<typeof buildGraph> | null = null;
+function lazyGraph() {
+  if (!_graph) _graph = buildGraph(products, customers, suppliers, orders, goals);
+  return _graph;
+}
 
 export const dataset = {
   products,
@@ -35,6 +42,8 @@ export const dataset = {
   agents,
   health,
   insights,
-  graph,
+  get graph() {
+    return lazyGraph();
+  },
   activity
 };

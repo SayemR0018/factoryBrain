@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { PlugZap, RefreshCw, Power, Pencil } from "lucide-react";
 import { useT } from "@/lib/useT";
-import { ingestionService } from "@/services/ingestion.service";
+import { ingestionService, isSensorSource } from "@/services/ingestion.service";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -16,6 +16,7 @@ import { SOURCE_FORMS, listSourceIds, maskValue } from "@/services/ingestion-for
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
 import Link from "next/link";
+import { FlaskConical } from "lucide-react";
 
 type SyncStatus = "idle" | "syncing" | "ok" | "fail";
 
@@ -23,6 +24,7 @@ export default function IntegrationsPage() {
   const { t, locale } = useT();
   const sources = useBusinessStore((s) => s.sources);
   const upsertSource = useBusinessStore((s) => s.upsertSource);
+  const simulatedData = useBusinessStore((s) => s.simulatedData);
   const toast = useToast();
   const [tick, setTick] = useState(0);
   const [status, setStatus] = useState<Record<string, SyncStatus>>({});
@@ -108,7 +110,17 @@ export default function IntegrationsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-body text-fg-primary truncate">{locale === "bn" ? s.labelBn : s.label}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-body text-fg-primary truncate">{locale === "bn" ? s.labelBn : s.label}</p>
+                          {simulatedData && isSensorSource(s.id) && (
+                            <Tooltip content={t("integrations.simulatedTip") as string}>
+                              <span className="inline-flex items-center gap-1 mono-pill text-fg-tertiary bg-surface-2 border border-border-subtle px-1.5 py-0.5 rounded-sm shrink-0">
+                                <FlaskConical size={10} />
+                                {t("integrations.simulated")}
+                              </span>
+                            </Tooltip>
+                          )}
+                        </div>
                         <span
                           className={cn(
                             "mono-pill border px-2 py-1 rounded-sm shrink-0",

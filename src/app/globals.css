@@ -109,6 +109,15 @@
 
     /* Constellation grid */
     --world-dot: rgba(124, 224, 198, 0.18);
+
+    /* Glass ingredient tokens — used by .glass, .glass-soft, .glass-strong.
+       Kept here so a single tweak re-tunes every translucent surface. */
+    --glass-alpha: 0.62;
+    --glass-blur: 14px;
+    --glass-saturation: 150%;
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
   }
 
   /* Light theme overrides — warm off-white surface + dark ink, same green (deepened) */
@@ -203,6 +212,13 @@
     --chart-grid: rgba(11, 14, 20, 0.05);
     --chart-axis: rgba(11, 14, 20, 0.1);
     --world-dot: rgba(47, 140, 122, 0.18);
+
+    --glass-alpha: 0.72;
+    --glass-blur: 18px;
+    --glass-saturation: 140%;
+    --glass-border: rgba(11, 14, 20, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.6);
+    --glass-shadow: 0 24px 48px rgba(20, 24, 31, 0.22);
   }
 
   html, body {
@@ -229,11 +245,15 @@
     background: var(--selection-bg);
   }
 
-  /* Reduce motion */
+  /* Reduce motion — tiered, NOT a kill switch.
+     Tier 1: stop parallax/spin/infinite motion. Tier 2: shorten fades.
+     Tier 3 (opacity, color, focus ring) is left alone. */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }
@@ -249,13 +269,105 @@
     border: 1px solid var(--border-subtle);
     border-radius: 10px;
   }
+
+  /* Glassmorphism: four ingredients — frost, translucency, edge highlight, depth.
+     Hover/active motion lives on transform/box-shadow (compositor-friendly),
+     never on the blur radius itself. */
   .glass {
+    position: relative;
     background: var(--bg-glass);
-    border: 1px solid var(--border-subtle);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
     border-radius: 12px;
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 var(--glass-highlight),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+    transition:
+      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 220ms ease,
+      border-color 220ms ease,
+      background-color 220ms ease;
+    will-change: transform;
   }
+  .glass-soft {
+    /* Lighter chrome — for chips, hover cards, inline translucent panels. */
+    background: color-mix(in srgb, var(--bg-glass), transparent 18%);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition:
+      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 220ms ease,
+      border-color 220ms ease;
+  }
+  .glass-strong {
+    /* Heavier frost for modals, drawers, palette. */
+    background: var(--bg-glass);
+    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    box-shadow:
+      0 32px 64px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  .glass:hover,
+  .glass-soft:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow:
+      0 28px 56px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Reduced-transparency fallback — drop the frost, keep it opaque enough to read. */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass,
+    .glass-soft,
+    .glass-strong {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: var(--bg-surface);
+    }
+    .glass::after,
+    .glass-soft::after {
+      content: none;
+    }
+  }
+
+  /* No backdrop-filter support — older browsers get a solid panel. */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass,
+    .glass-soft,
+    .glass-strong {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: var(--bg-surface);
+    }
+  }
+
+  /* Faint grain via inline SVG noise — kills the banding that heavy blur
+     produces over flat gradients. Opacity is capped well below readable. */
+  .glass::after,
+  .glass-soft::after,
+  .glass-strong::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
   .hairline {
     border-color: var(--border-subtle);
   }
@@ -294,18 +406,21 @@
     font-family: Inter, "Hind Siliguri", system-ui, sans-serif;
   }
   .react-flow__controls {
-    background: transparent;
-    border: none;
-    box-shadow: none;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
   .react-flow__controls button {
-    background: var(--bg-surface-2);
+    background: transparent;
     color: var(--fg-secondary);
     border-bottom: 1px solid var(--border-subtle);
+    transition: background-color 160ms ease, color 160ms ease;
   }
   .react-flow__controls button:hover {
     background: var(--bg-surface);
-    color: var(--fg-primary);
+    color: var(--accent);
   }
   .react-flow__background {
     background-color: var(--bg-canvas);
@@ -324,4 +439,75 @@
   background:
     radial-gradient(circle at 50% 45%, rgba(124, 224, 198, 0.05), transparent 55%),
     var(--bg-canvas);
+}
+
+/* Status pulse for at-risk / down brain nodes */
+@keyframes brain-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(226, 107, 107, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(226, 107, 107, 0.18); }
+}
+
+/* Brand-glyph draw-on — animates dashoffset on the embedded path.
+   Disabled under reduced motion. */
+@keyframes brand-stroke-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.brand-glyph-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: brand-stroke-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-glyph-path { animation: none; stroke-dashoffset: 0; }
+}
+
+/* Generic "raise" lift for cards, used by hover micro-interactions.
+   Animates transform/box-shadow only — never the blur radius. */
+.lift {
+  transition:
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+  will-change: transform;
+}
+.lift:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Press feedback — scale 0.97 on tap. Snappy spring is configured in JS
+   where the library handles it; here we cover the CSS-only paths
+   (chips, ghost rows, toggle rows). */
+.press {
+  transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* WhatsApp chat bubble tails */
+.wp-bubble-out::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  background: #d9fdd3;
+  border-bottom-right-radius: 12px;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+.wp-bubble-in::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  background: var(--bg-surface);
+  border-bottom-left-radius: 12px;
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
 }

@@ -10,7 +10,7 @@ const defaultPolicy: RiskPolicy = {
   autoExecuteCapBdt: 25000
 };
 
-const KEY = "thalamus:risk-policy";
+const KEY = "bunonbrain:risk-policy";
 
 export const riskService = {
   read(): RiskPolicy {

@@ -382,12 +382,12 @@ function KindIcon({ kind, small }: { kind: SearchKind; small?: boolean }) {
       return <Sparkles size={size} />;
     case "activity":
       return <Clock size={size} />;
-    case "product":
-    case "customer":
+    case "order":
+    case "buyer":
     case "supplier":
-    case "policy":
-    case "workflow":
-    case "goal":
+    case "compliance":
+    case "process":
+    case "target":
     case "risk":
       return <FileText size={size} />;
     case "integration":

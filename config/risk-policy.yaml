@@ -1,4 +1,4 @@
-# THALAMUS risk policy
+# BunonBrain risk policy
 # Editable from /app/settings in the prototype.
 
 risk_tiers:
@@ -12,10 +12,12 @@ risk_tiers:
     label: "Human approval required"
     color: "risk/high"
 
-# Inventory Agent order-size threshold (BDT)
-# Above this threshold, restock recommendations require explicit approval
-inventory:
-  order_size_threshold_bdt: 25000
+# Maintenance Agent — auto-suggest threshold.
+# A repair recommendation above this BDT cost requires explicit human approval
+# before any work order can be raised. Below the threshold the maintenance
+# agent may auto-suggest (but never auto-execute) without approval.
+maintenance:
+  repair_cost_threshold_bdt: 25000
 
 # Auto-execute cap by tier (BDT)
 execution_caps:

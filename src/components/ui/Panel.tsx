@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -13,8 +14,14 @@ type Props = {
 
 export function Panel({ className, children, variant = "default", title, subtitle, right }: Props) {
   const wrapper = variant === "glass" ? "glass" : "surface";
+  const reduceMotion = useReducedMotion();
   return (
-    <section className={cn(wrapper, className)}>
+    <motion.section
+      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(wrapper, className)}
+    >
       {(title || right) && (
         <header className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border-subtle">
           <div className="min-w-0">
@@ -25,6 +32,6 @@ export function Panel({ className, children, variant = "default", title, subtitl
         </header>
       )}
       <div className="p-4">{children}</div>
-    </section>
+    </motion.section>
   );
 }

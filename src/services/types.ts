@@ -20,13 +20,39 @@ export type IngestionSourcePublic = {
 
 export type BrainEntityPublic = {
   id: string;
-  kind: "product" | "customer" | "supplier" | "policy" | "workflow" | "goal" | "risk";
+  kind:
+    | "product"
+    | "customer"
+    | "supplier"
+    | "policy"
+    | "workflow"
+    | "goal"
+    | "risk"
+    | "line"
+    | "machine"
+    | "order"
+    | "buyer"
+    | "process"
+    | "target"
+    | "compliance";
   label: string;
   labelBn: string;
   /** 0..1 importance weight — drives node size on the canvas. */
   weight?: number;
   meta?: Record<string, string | number>;
+  /** Optional operational status, layered on top of kind colour. */
+  status?: "healthy" | "at_risk" | "down";
 };
+
+/** Typed edge relationships for the factory graph. */
+export type EdgeKind =
+  | "assigned_to"
+  | "contains"
+  | "follows"
+  | "has"
+  | "threatens"
+  | "sourced_from"
+  | "shipped_to";
 
 export type BrainEdgePublic = {
   id: string;
@@ -35,6 +61,7 @@ export type BrainEdgePublic = {
   weight: number;
   strong?: boolean;
   label?: string;
+  kind?: EdgeKind;
 };
 
 export type BrainGraph = {
@@ -114,7 +141,7 @@ export type AgentPublic = {
   tasksToday: number;
   recentCount: number;
   /** Visual identity for the avatar (per-agent colour + glyph). */
-  glyph?: "sales" | "marketing" | "inventory" | "customer-success" | "finance" | "policy" | "automation";
+  glyph?: "line-throughput" | "maintenance" | "orchestrator";
 };
 
 export type ActivityItemPublic = {

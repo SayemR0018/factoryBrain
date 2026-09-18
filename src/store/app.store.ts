@@ -36,20 +36,20 @@ type AppState = {
 const safeGet = <T,>(key: string, fallback: T): T => storage.get<T>(key, fallback);
 
 export const useAppStore = create<AppState>((set, get) => ({
-  locale: safeGet<Locale>("thalamus:locale", defaultLocale),
-  theme: safeGet<Theme>("thalamus:theme", "dark"),
+  locale: safeGet<Locale>("bunonbrain:locale", defaultLocale),
+  theme: safeGet<Theme>("bunonbrain:theme", "dark"),
   commandPaletteOpen: false,
   resetRequired: false,
-  onboardedAt: safeGet<string | null>("thalamus:onboardedAt", null),
-  tourCompleted: safeGet<boolean>("thalamus:tourCompleted", false),
-  tourDismissed: safeGet<boolean>("thalamus:tourDismissed", false),
-  recentSearches: safeGet<string[]>("thalamus:recentSearches", []),
+  onboardedAt: safeGet<string | null>("bunonbrain:onboardedAt", null),
+  tourCompleted: safeGet<boolean>("bunonbrain:tourCompleted", false),
+  tourDismissed: safeGet<boolean>("bunonbrain:tourDismissed", false),
+  recentSearches: safeGet<string[]>("bunonbrain:recentSearches", []),
   setLocale: (l) => {
-    storage.set("thalamus:locale", l);
+    storage.set("bunonbrain:locale", l);
     set({ locale: l });
   },
   setTheme: (t) => {
-    storage.set("thalamus:theme", t);
+    storage.set("bunonbrain:theme", t);
     set({ theme: t });
     get().applyTheme();
   },
@@ -73,15 +73,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
   markOnboarded: () => {
     const stamp = new Date().toISOString();
-    storage.set("thalamus:onboardedAt", stamp);
+    storage.set("bunonbrain:onboardedAt", stamp);
     set({ onboardedAt: stamp });
   },
   setTourCompleted: (v) => {
-    storage.set("thalamus:tourCompleted", v);
+    storage.set("bunonbrain:tourCompleted", v);
     set({ tourCompleted: v });
   },
   setTourDismissed: (v) => {
-    storage.set("thalamus:tourDismissed", v);
+    storage.set("bunonbrain:tourDismissed", v);
     set({ tourDismissed: v });
   },
   pushRecentSearch: (q) => {
@@ -89,18 +89,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!trimmed) return;
     const cur = get().recentSearches.filter((s) => s.toLowerCase() !== trimmed.toLowerCase());
     const next = [trimmed, ...cur].slice(0, 8);
-    storage.set("thalamus:recentSearches", next);
+    storage.set("bunonbrain:recentSearches", next);
     set({ recentSearches: next });
   },
   clearRecentSearches: () => {
-    storage.set("thalamus:recentSearches", []);
+    storage.set("bunonbrain:recentSearches", []);
     set({ recentSearches: [] });
   },
   resetDemo: () => {
     if (typeof window !== "undefined") {
       try {
         for (const k of Object.keys(window.localStorage)) {
-          if (k.startsWith("thalamus:")) window.localStorage.removeItem(k);
+          if (
+            k.startsWith("bunonbrain:") ||
+            k.startsWith("factoryBrain:") ||
+            k.startsWith("thalamus:")
+          ) {
+            window.localStorage.removeItem(k);
+          }
         }
       } catch {
         // ignore

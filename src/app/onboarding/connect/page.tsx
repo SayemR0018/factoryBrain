@@ -9,6 +9,7 @@ import { useT } from "@/lib/useT";
 import { Button, DemoChip } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useBusinessStore } from "@/store/business.store";
+import { useToast } from "@/components/ui/Toast";
 import { ingestionService } from "@/services/ingestion.service";
 import { SOURCE_FORMS, listSourceIds, maskValue, type SourceForm } from "@/services/ingestion-forms";
 import { cn } from "@/lib/cn";
@@ -28,6 +29,7 @@ export default function ConnectPage() {
   const router = useRouter();
   const sources = useBusinessStore((s) => s.sources);
   const upsertSource = useBusinessStore((s) => s.upsertSource);
+  const toast = useToast();
   const [state, setState] = useState<Record<string, CardState>>({});
   const [showFormFor, setShowFormFor] = useState<string | null>(null);
 
@@ -62,10 +64,13 @@ export default function ConnectPage() {
     patch(id, { loading: false, expanded: false });
     if (!result.ok) {
       patch(id, { error: result.error ?? "Could not connect." });
+      toast.push({ title: `Could not connect ${form.title}`, description: result.error ?? "Unknown error" });
+    } else {
+      toast.push({ title: `${form.title} connected` });
     }
   }
 
-  function useDemo(id: string) {
+  function fillDemo(id: string) {
     const form = SOURCE_FORMS[id];
     patch(id, { values: { ...form.demoValues() }, error: null });
   }
@@ -140,7 +145,7 @@ export default function ConnectPage() {
                 {!done && (
                   <button
                     type="button"
-                    onClick={() => useDemo(id)}
+                    onClick={() => fillDemo(id)}
                     className="ml-auto inline-flex items-center gap-1 text-caption text-fg-tertiary hover:text-fg-primary"
                   >
                     <Sparkles size={11} /> {t("connect.useDemo")}

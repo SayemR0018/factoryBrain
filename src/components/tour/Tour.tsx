@@ -44,8 +44,8 @@ export function Tour() {
     function onRestart() {
       runTour();
     }
-    window.addEventListener("thalamus:restart-tour", onRestart);
-    return () => window.removeEventListener("thalamus:restart-tour", onRestart);
+    window.addEventListener("bunonbrain:restart-tour", onRestart);
+    return () => window.removeEventListener("bunonbrain:restart-tour", onRestart);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps]);
 
@@ -65,7 +65,7 @@ export function Tour() {
       animate: true,
       overlayOpacity: 0.55,
       stagePadding: 6,
-      popoverClass: "thalamus-tour",
+      popoverClass: "bunonbrain-tour",
       nextBtnText: t("tour.next"),
       prevBtnText: t("tour.back"),
       doneBtnText: t("tour.done"),
@@ -88,6 +88,6 @@ export function Tour() {
 /** Imperatively restart the tour from anywhere. */
 export function restartTour() {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("thalamus:tour-restart"));
+    window.dispatchEvent(new CustomEvent("bunonbrain:tour-restart"));
   }
 }

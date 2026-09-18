@@ -1,80 +1,46 @@
-# THALAMUS agent routing table.
+# BunonBrain agent routing table.
 # Read by the service layer at runtime. Never hardcode models per agent.
 #
 # Conventions:
 #   risk:       low | medium | high
-#   execution:  auto | approval_required | per_policy
+#   execution:  auto | approval_required | auto_suggest_with_threshold | per_policy
 #   fallback:   ordered list of alternative model tiers
 
 agents:
-  - id: sales-analyst
-    purpose: "Summarise revenue, customer and pipeline trends; explain anomalies"
+  - id: line-throughput-agent
+    purpose: "Read line and order data, name the bottleneck operation"
     model_tier: "mid"
     model_family: "gpt-4.1-mini / claude-sonnet-small"
     risk: low
     execution: auto
-    fallback: ["small-summariser"]
-    context_slices: ["orders", "customers", "products"]
+    fallback: ["templated-bottleneck"]
+    context_slices: ["lines", "orders", "targets"]
 
-  - id: marketing-agent
-    purpose: "Draft campaign copy, promos, social posts in Bangla and English"
-    model_tier: "strong-creative"
-    model_family: "claude-sonnet / gpt-4.1"
-    risk: medium
-    execution: approval_required
-    fallback: ["safe-copy-guard"]
-    context_slices: ["products", "customers", "campaigns"]
-
-  - id: inventory-agent
-    purpose: "Forecast demand and recommend restocks using statistical baseline + LLM rationale"
-    model_tier: "structured-output"
-    model_family: "gpt-4.1 with json_schema"
+  - id: maintenance-agent
+    purpose: "Read machine telemetry, flag units trending toward failure"
+    model_tier: "mid"
+    model_family: "gpt-4.1-mini"
     risk: medium
     execution: auto_suggest_with_threshold
-    # below threshold: auto-execute; above: approval required
-    fallback: ["templated-rationale"]
-    context_slices: ["products", "inventory", "orders", "suppliers"]
+    fallback: ["threshold-only-no-rationale"]
+    context_slices: ["machines", "lines"]
 
-  - id: customer-success
-    purpose: "Surface themes from chat, reviews, and feedback; flag churn risk"
-    model_tier: "mid"
-    model_family: "claude-sonnet / gpt-4.1-mini"
+  - id: manager-agent
+    purpose: "Route free-text factory questions, draft the daily brief"
+    model_tier: "frontier"
+    model_family: "claude-sonnet / gpt-4.1"
     risk: low
     execution: auto
-    fallback: ["small-summariser"]
-    context_slices: ["conversations", "customers", "orders"]
-
-  - id: finance-agent
-    purpose: "Reason over cashflow, margins, and supplier commitments; every action reviewed"
-    model_tier: "frontier"
-    model_family: "claude-opus / gpt-5-class"
-    risk: high
-    execution: approval_required
     fallback: ["mid-with-degraded-confidence-flag"]
-    context_slices: ["orders", "suppliers", "products", "policies"]
-
-  - id: policy-docs-agent
-    purpose: "Interpret return policy, supplier agreements, contracts"
-    model_tier: "frontier-long-context"
-    model_family: "claude-opus / gpt-5-class"
-    risk: high
-    execution: approval_required
-    fallback: ["mid-with-degraded-confidence-flag"]
-    context_slices: ["policies", "suppliers", "conversations"]
-
-  - id: automation-agent
-    purpose: "Execute actions on the side-effect surface; risk set per policy"
-    model_tier: "tool-reliable"
-    model_family: "claude-sonnet"
-    risk: per_action
-    execution: per_policy
-    fallback: ["rules-engine"]
     context_slices: ["*"]
 
 # Live slice configuration (consumed by /api/ask route handler)
+# The code in src/app/api/ask/route.ts and src/app/api/agents/[agentId]/run/route.ts
+# reads process.env.LLM_PROVIDER / LLM_API_KEY / LLM_MODEL — keep these names
+# aligned with .env.example.
 live_slice:
-  provider_env: "THALAMUS_LLM_PROVIDER"
-  key_env: "THALAMUS_LLM_KEY"
-  model_env: "THALAMUS_LLM_MODEL"
+  provider_env: "LLM_PROVIDER"
+  key_env: "LLM_API_KEY"
+  model_env: "LLM_MODEL"
   enabled_when_provider_present: true
   default_if_absent: "mock"

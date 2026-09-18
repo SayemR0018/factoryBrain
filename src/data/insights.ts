@@ -54,190 +54,202 @@ export function buildInsights(
 ): Insight[] {
   const out: Insight[] = [];
 
-  // 1) Dhaka revenue dip — Sales Analyst (Low)
+  // 1) Line 3 efficiency below target — Line Throughput (Medium)
   {
-    const dhakaOrders = orders.filter((o) => o.region === "Dhaka" && o.daysAgo <= 30);
-    const dhakaPrev = orders.filter((o) => o.region === "Dhaka" && o.daysAgo > 30 && o.daysAgo <= 60);
     out.push({
       id: "ins-1",
-      agentId: "sales-analyst",
-      agentLabel: "Sales Analyst",
-      title: "Dhaka revenue down 22% in the last 30 days",
-      titleBn: "গত ৩০ দিনে ঢাকার আয় ২২% কমেছে",
-      finding: "Dhaka revenue fell sharply while every other region held flat. The drop concentrates in two product categories and on three weekdays. Delivery delays in two Dhaka sub-zones are the most plausible driver; a smaller share traces to a competitor promo.",
-      findingBn: "ঢাকার আয় উল্লেখযোগ্যভাবে কমেছে, অন্যান্য অঞ্চল সমান ছিল। হ্রাসটি দুটি পণ্য ক্যাটাগরি ও তিনটি কর্মদিবসে কেন্দ্রীভূত। ঢাকার দুটি সাব-জোনে ডেলিভারি বিলম্ব সম্ভাব্য প্রধান কারণ।",
+      agentId: "line-throughput-agent",
+      agentLabel: "Line Efficiency",
+      title: "Line 3 efficiency trending 14% below target",
+      titleBn: "লাইন ৩ এর দক্ষতা লক্ষ্যের চেয়ে ১৪% কম",
+      finding:
+        "Bundles scanned over the last 2 hours on Line 3 imply a line efficiency of 84%, against the daily target of 98%. The bottleneck operation is Sewing (SMV 0.55), where average bundle cycle time exceeds the SAH-based allowance.",
+      findingBn:
+        "গত ২ ঘন্টায় লাইন ৩ এ স্ক্যান করা বান্ডলগুলো ৮৪% দক্ষতা নির্দেশ করে, দৈনিক লক্ষ্য ৯৮% এর বিপরীতে। বটলনেক অপারেশন হলো সেলাই (SMV ০.৫৫), যেখানে গড় বান্ডল সাইকেল টাইম SAH-ভিত্তিক অনুমোদিত সময়ের চেয়ে বেশি।",
       factors: [
-        { label: "Dhaka revenue Δ", labelBn: "ঢাকা আয়ের পরিবর্তন", magnitude: `${(health.dhakaDip.pct * 100).toFixed(1)}%`, magnitudeBn: `${(health.dhakaDip.pct * 100).toFixed(1)}%` },
-        { label: "Other regions Δ", labelBn: "অন্যান্য অঞ্চলের পরিবর্তন", magnitude: "+0.4%", magnitudeBn: "+০.৪%" },
-        { label: "Delivery complaints (Dhaka, 7d)", labelBn: "ডেলিভারি অভিযোগ (ঢাকা, ৭ দিন)", magnitude: "+38%", magnitudeBn: "+৩৮%" }
+        { label: "Line 3 efficiency", labelBn: "লাইন ৩ দক্ষতা", magnitude: "84%", magnitudeBn: "৮৪%" },
+        { label: "Target", labelBn: "লক্ষ্য", magnitude: "98%", magnitudeBn: "৯৮%" },
+        { label: "Bottleneck op", labelBn: "বটলনেক অপারেশন", magnitude: "Sewing", magnitudeBn: "সেলাই" }
       ],
       recommendation: {
-        title: "Investigate Dhaka delivery SLA breaches",
-        titleBn: "ঢাকা ডেলিভারি SLA লঙ্ঘন তদন্ত",
-        action: "Open an investigation; do not change pricing yet.",
-        actionBn: "তদন্ত শুরু করুন; এখনই দাম পরিবর্তন করবেন না।",
-        riskTier: "low",
-        targetStage: "logged"
+        title: "Re-balance Line 3 towards Sewing",
+        titleBn: "লাইন ৩ কে সেলাইমুখী করে পুনর্ভারসাম্য করুন",
+        action: "Move two helpers from Finishing to Sewing for the next 90 minutes; reassess at shift handover.",
+        actionBn: "পরবর্তী ৯০ মিনিটের জন্য ফিনিশিং থেকে সেলাইতে দুজন সহায়ক সরান; শিফট হ্যান্ডওভারে পুনর্মূল্যায়ন।",
+        riskTier: "medium",
+        targetStage: "pending_approval"
       },
       evidence: [
-        { domain: "orders", count: dhakaOrders.length, filter: { region: "Dhaka", window: "30d" }, previewIds: dhakaOrders.slice(0, 6).map((o) => o.id) },
-        { domain: "orders", count: dhakaPrev.length, filter: { region: "Dhaka", window: "previous 30d" } }
+        { domain: "orders", count: 84, filter: { lineId: "line-3", window: "2h" }, previewIds: ["po-4471", "po-4502"] },
+        { domain: "inventory", count: 36 }
       ],
-      stage: "suggested",
-      createdAt: isoAgo(60 * 60 * 1000),
-      updatedAt: isoAgo(60 * 60 * 1000),
-      confidence: 0.82,
+      stage: "pending_approval",
+      createdAt: isoAgo(45 * 60 * 1000),
+      updatedAt: isoAgo(45 * 60 * 1000),
+      confidence: 0.86,
       pinned: true
     });
   }
 
-  // 2) Stockout risk — Inventory Agent (Medium)
+  // 2) Maintenance: two machines trending to failure (Medium)
   {
-    const atRisk = inventory.filter((i) => i.atRisk);
-    const critical = atRisk.filter((i) => i.daysUntilStockout < 8);
     out.push({
       id: "ins-2",
-      agentId: "inventory-agent",
-      agentLabel: "Inventory Agent",
-      title: `${critical.length} products will stock out within a week`,
-      titleBn: `${critical.length}টি পণ্য এক সপ্তাহের মধ্যে স্টকআউট হবে`,
-      finding: "Two planted SKUs (Coral Apparel Pro, Harvest Grocery Max) plus four mid-velocity items are projected to hit zero stock within 7 days at current daily demand. Lead times range 6–14 days for the affected SKUs.",
-      findingBn: "দুটি পণ্য এবং চারটি মাঝারি গতির পণ্য ৭ দিনের মধ্যে শূন্য স্টকে পৌঁছাবে। লিড টাইম ৬–১৪ দিন।",
+      agentId: "maintenance-agent",
+      agentLabel: "Maintenance & Uptime",
+      title: "Two sewing machines trending toward bearing wear",
+      titleBn: "দুটি সেলাই মেশিন বিয়ারিং ক্ষয়ের দিকে এগোচ্ছে",
+      finding:
+        "Vibration RMS and motor temperature on M-12 (Line 2) and M-27 (Line 4) have crossed the warning band over the last 90 minutes — shapes match NASA C-MAPSS-style degradation. Forecast: probability of unplanned stop within 7 days is 38% and 31% respectively.",
+      findingBn:
+        "গত ৯০ মিনিটে M-১২ (লাইন ২) এবং M-২৭ (লাইন ৪) এ কম্পন RMS এবং মোটর তাপমাত্রা সতর্কতা ব্যান্ড অতিক্রম করেছে — NASA C-MAPSS-স্টাইল ক্ষয়ের সাথে মিলে। পূর্বাভাস: ৭ দিনের মধ্যে অপরিকল্পিত বন্ধের সম্ভাবনা যথাক্রমে ৩৮% এবং ৩১%।",
       factors: [
-        { label: "Critical SKUs", labelBn: "গুরুতর SKU", magnitude: String(critical.length), magnitudeBn: bn(critical.length) },
-        { label: "Total at-risk", labelBn: "মোট ঝুঁকিপূর্ণ", magnitude: String(atRisk.length), magnitudeBn: bn(atRisk.length) },
-        { label: "Order value at risk", labelBn: "ঝুঁকিপূর্ণ অর্ডার মূল্য", magnitude: "৳1.84L", magnitudeBn: "৳১.৮৪ লক্ষ" }
+        { label: "M-12 vibration RMS", labelBn: "M-১২ কম্পন RMS", magnitude: "+2.4σ", magnitudeBn: "+২.৪σ" },
+        { label: "M-27 motor temp", labelBn: "M-২৭ মোটর তাপমাত্রা", magnitude: "+3.1σ", magnitudeBn: "+৩.১σ" },
+        { label: "Line 2 PoF (7d)", labelBn: "লাইন ২ PoF (৭ দিন)", magnitude: "38%", magnitudeBn: "৩৮%" }
       ],
       recommendation: {
-        title: `Restock ${critical.length} critical SKUs`,
-        titleBn: `${bn(critical.length)}টি গুরুতর SKU রিস্টক করুন`,
-        action: "Submit restock orders to suppliers via the automation layer.",
-        actionBn: "সরবরাহকারীদের কাছে রিস্টক অর্ডার জমা দিন।",
+        title: "Schedule bearing inspection for M-12 and M-27",
+        titleBn: "M-১২ এবং M-২৭ এর জন্য বিয়ারিং পরীক্ষা শিডিউল করুন",
+        action: "Open a maintenance work order; defer non-critical production on those machines for ~30 min.",
+        actionBn: "মেইনটেন্যান্স ওয়ার্ক অর্ডার খুলুন; ঐ মেশিনগুলোতে অ-জরুরি উৎপাদন ~৩০ মিনিটের জন্য স্থগিত করুন।",
         riskTier: "medium",
         targetStage: "pending_approval"
       },
       evidence: [
-        { domain: "inventory", count: atRisk.length, previewIds: atRisk.slice(0, 6).map((i) => i.productId) },
-        { domain: "products", count: critical.length }
+        { domain: "inventory", count: 36, filter: { machinesAtRisk: 2 }, previewIds: ["machine-12", "machine-27"] },
+        { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] }
       ],
-      stage: "pending_approval",
-      createdAt: isoAgo(3 * 60 * 60 * 1000),
-      updatedAt: isoAgo(3 * 60 * 60 * 1000),
-      confidence: 0.88,
+      stage: "suggested",
+      createdAt: isoAgo(2 * 60 * 60 * 1000),
+      updatedAt: isoAgo(2 * 60 * 60 * 1000),
+      confidence: 0.79,
       pinned: true
     });
   }
 
-  // 3) Churn rise — Customer Success (Low)
+  // 3) Orchestrator morning brief — shipment risk (Medium)
   {
-    const churnHigh = customers.filter((c) => c.churnRisk >= 0.7).length;
     out.push({
       id: "ins-3",
-      agentId: "customer-success",
-      agentLabel: "Customer Success",
-      title: "Repeat-purchase rate is trending down",
-      titleBn: "পুনরায় কেনার হার কমছে",
-      finding: "The share of last-30-day buyers who are repeat customers dropped from the previous 30-day window. Combined with the Dhaka dip, this points to a localised experience issue rather than a catalogue issue.",
-      findingBn: "গত ৩০ দিনের ক্রেতাদের মধ্যে পুনরায় ক্রেতার অংশ আগের ৩০ দিনের তুলনায় কমেছে।",
+      agentId: "manager-agent",
+      agentLabel: "Manager Orchestrator",
+      title: "Shipment risk for PO-4471 due to Line 3 slip",
+      titleBn: "লাইন ৩ এর বিলম্বের কারণে PO-৪৪৭১ এ শিপমেন্ট ঝুঁকি",
+      finding:
+        "Line 3 efficiency is below target and PO-4471 (H&M buyer, 5,200 polo units) ships in 36 hours. Orchestrator sub-routes to the line-efficiency agent: at current pace the order will miss its shipment window by ~14 hours. Recommend re-routing 1,800 units to Line 1.",
+      findingBn:
+        "লাইন ৩ এর দক্ষতা লক্ষ্যের নিচে এবং PO-৪৪৭১ (H&M ক্রেতা, ৫,২০০ পোলো ইউনিট) ৩৬ ঘন্টায় শিপ হবে। অর্কেস্ট্রেটর লাইন-দক্ষতা এজেন্টে সাব-রাউট করে: বর্তমান গতিতে অর্ডারটি শিপমেন্ট উইন্ডো ~১৪ ঘন্টা মিস করবে। ১,৮০০ ইউনিট লাইন ১ এ পুনর্নির্দেশ করার সুপারিশ।",
       factors: [
-        { label: "Δ repeat rate", labelBn: "পুনরায় কেনার হারের পরিবর্তন", magnitude: `${(health.churnRisePct * 100).toFixed(1)}%`, magnitudeBn: `${(health.churnRisePct * 100).toFixed(1)}%` },
-        { label: "Customers at risk", labelBn: "ঝুঁকিপূর্ণ ক্রেতা", magnitude: String(churnHigh), magnitudeBn: bn(churnHigh) }
+        { label: "Order value", labelBn: "অর্ডার মূল্য", magnitude: "৳6.8L", magnitudeBn: "৳৬.৮ লক্ষ" },
+        { label: "Hours behind", labelBn: "পিছিয়ে ঘন্টা", magnitude: "14h", magnitudeBn: "১৪ ঘন্টা" },
+        { label: "Line 1 spare capacity", labelBn: "লাইন ১ অতিরিক্ত ক্ষমতা", magnitude: "32%", magnitudeBn: "৩২%" }
       ],
       recommendation: {
-        title: "Send win-back message to top 50 at-risk customers",
-        titleBn: "শীর্ষ ৫০ ঝুঁকিপূর্ণ ক্রেতাকে উইন-ব্যাক বার্তা পাঠান",
-        action: "Draft the message in Bangla + English and queue for review.",
-        actionBn: "বাংলা + ইংরেজিতে খসড়া তৈরি করে পর্যালোচনার জন্য সারিবদ্ধ করুন।",
-        riskTier: "medium",
-        targetStage: "suggested"
-      },
-      evidence: [
-        { domain: "customers", count: churnHigh, filter: { churnRisk: ">=0.7" } },
-        { domain: "orders", count: 214 }
-      ],
-      stage: "suggested",
-      createdAt: isoAgo(8 * 60 * 60 * 1000),
-      updatedAt: isoAgo(8 * 60 * 60 * 1000),
-      confidence: 0.71
-    });
-  }
-
-  // 4) Marketing: weekly basket plan (Medium)
-  {
-    out.push({
-      id: "ins-4",
-      agentId: "marketing-agent",
-      agentLabel: "Marketing Agent",
-      title: "Weekly basket plan: 8% off recurring grocery orders",
-      titleBn: "সাপ্তাহিক বাস্কেট প্ল্যান: পুনরাবৃত্ত মুদি অর্ডারে ৮% ছাড়",
-      finding: "From the conversations thread, multiple customers asked about a loyalty discount on weekly groceries. The basket cohort makes up 28% of monthly revenue and has the highest repeat rate in the dataset.",
-      findingBn: "কথোপকথনের থ্রেড থেকে, একাধিক ক্রেতা সাপ্তাহিক মুদিতে লয়্যালটি ছাড়ের অনুরোধ করেছেন।",
-      factors: [
-        { label: "Basket cohort revenue share", labelBn: "বাস্কেট কোহোর্ট আয়ের অংশ", magnitude: "28%", magnitudeBn: "২৮%" },
-        { label: "Repeat rate (basket)", labelBn: "পুনরায় কেনার হার (বাস্কেট)", magnitude: "61%", magnitudeBn: "৬১%" }
-      ],
-      recommendation: {
-        title: "Approve the weekly-basket creative",
-        titleBn: "সাপ্তাহিক বাস্কেট ক্রিয়েটিভ অনুমোদন",
-        action: "Approve creative and send via WhatsApp.",
-        actionBn: "ক্রিয়েটিভ অনুমোদন করে হোয়াটসঅ্যাপে পাঠান।",
+        title: "Re-route 1,800 units to Line 1",
+        titleBn: "১,৮০০ ইউনিট লাইন ১ এ পুনর্নির্দেশ",
+        action: "Split the PO at the next operation handover; flag buyer for proactive delay notice.",
+        actionBn: "পরবর্তী অপারেশন হ্যান্ডওভারে PO ভাগ করুন; সক্রিয় বিলম্ব বিজ্ঞপ্তির জন্য ক্রেতাকে ফ্ল্যাগ করুন।",
         riskTier: "medium",
         targetStage: "pending_approval"
       },
       evidence: [
-        { domain: "conversations", count: 6, previewIds: ["conv-5"] }
+        { domain: "orders", count: 1, filter: { poId: "po-4471" }, previewIds: ["po-4471"] },
+        { domain: "customers", count: 1, previewIds: ["buyer-hm"] }
       ],
-      stage: "pending_approval",
-      createdAt: isoAgo(2 * 60 * 60 * 1000),
-      updatedAt: isoAgo(2 * 60 * 60 * 1000),
+      stage: "suggested",
+      createdAt: isoAgo(20 * 60 * 1000),
+      updatedAt: isoAgo(20 * 60 * 1000),
       confidence: 0.74
     });
   }
 
-  // 5) Finance: cashflow visibility (High)
+  // 4) Orchestrator: buyer complaint cluster — QC pass-rate (Low)
   {
     out.push({
-      id: "ins-5",
-      agentId: "finance-agent",
-      agentLabel: "Finance Agent",
-      title: "Outstanding supplier commitments exceed safe threshold",
-      titleBn: "বকেয়া সরবরাহকারী প্রতিশ্রুতি নিরাপদ সীমা অতিক্রম করেছে",
-      finding: "Three supplier commitments total ৳4.18L with net-30 terms; against current cashflow projection this leaves a 12-day buffer. Recommend renegotiating one commitment.",
-      findingBn: "তিনটি সরবরাহকারী প্রতিশ্রুতি মোট ৪.১৮ লক্ষ টাকা; বর্তমান ক্যাশফ্লো অনুমানের বিপরীতে ১২ দিনের বাফার থাকে।",
+      id: "ins-4",
+      agentId: "manager-agent",
+      agentLabel: "Manager Orchestrator",
+      title: "AQL pass-rate dropping on the C&A order",
+      titleBn: "C&A অর্ডারে AQL পাস-হার কমছে",
+      finding:
+        "Final QC AQL pass-rate on PO-4493 (C&A, denim) fell from 96% to 88% across the last four inspections. Orchestrator routes to compliance docs: Higg FEM and the buyer code both flag stitch density as the most common defect reason.",
+      findingBn:
+        "PO-৪৪৯৩ (C&A, ডেনিম) এর চূড়ান্ত QC AQL পাস-হার শেষ চারটি পরিদর্শনে ৯৬% থেকে ৮৮% এ নেমেছে। অর্কেস্ট্রেটর সম্মতি নথিতে রাউট করে: Higg FEM এবং ক্রেতা কোড উভয়ই সেলাই ঘনত্বকে সবচেয়ে সাধারণ ত্রুটি কারণ হিসেবে চিহ্নিত করে।",
       factors: [
-        { label: "Total committed", labelBn: "মোট প্রতিশ্রুত", magnitude: "৳4.18L", magnitudeBn: "৳৪.১৮ লক্ষ" },
-        { label: "Cash buffer", labelBn: "ক্যাশ বাফার", magnitude: "12 days", magnitudeBn: "১২ দিন" }
+        { label: "AQL pass-rate Δ", labelBn: "AQL পাস-হার পরিবর্তন", magnitude: "−8pp", magnitudeBn: "−৮ শতাংশ পয়েন্ট" },
+        { label: "Inspections reviewed", labelBn: "পর্যালোচিত পরিদর্শন", magnitude: "4", magnitudeBn: "৪" }
       ],
       recommendation: {
-        title: "Renegotiate Sylhet Tea & Beauty payment terms",
-        titleBn: "সিলেট চা ও বিউটি পেমেন্ট শর্ত পুনর্বিবেচনা",
-        action: "Request net-45 in exchange for 2% early-payment on smaller orders.",
-        actionBn: "ছোট অর্ডারে ২% আগাম পেমেন্টের বিনিময়ে নেট-৪৫ অনুরোধ করুন।",
-        riskTier: "high",
-        targetStage: "pending_approval"
+        title: "Pause Line 4 stitching, retrain operators on stitch density",
+        titleBn: "লাইন ৪ সেলাই স্থগিত, সেলাই ঘনত্বে অপারেটরদের পুনরায় প্রশিক্ষণ",
+        action: "Open a 30-minute coaching window on Line 4 stitching.",
+        actionBn: "লাইন ৪ সেলাইতে ৩০ মিনিটের কোচিং উইন্ডো খুলুন।",
+        riskTier: "low",
+        targetStage: "suggested"
       },
       evidence: [
-        { domain: "suppliers", count: 3, previewIds: ["sup-4", "sup-1", "sup-10"] },
-        { domain: "policies", count: 1, previewIds: ["policy:supplier-agreement-1"] }
+        { domain: "policies", count: 2, previewIds: ["policy:higg-fem-1", "policy:ca-code-1"] },
+        { domain: "orders", count: 1, filter: { poId: "po-4493" } }
       ],
-      stage: "pending_approval",
-      createdAt: isoAgo(20 * 60 * 60 * 1000),
-      updatedAt: isoAgo(20 * 60 * 60 * 1000),
-      confidence: 0.83
+      stage: "suggested",
+      createdAt: isoAgo(6 * 60 * 60 * 1000),
+      updatedAt: isoAgo(6 * 60 * 60 * 1000),
+      confidence: 0.72
     });
   }
 
-  // 6) Automation: executed (already done)
+  // 5) Line Throughput: throughput target met (Low, done)
+  {
+    out.push({
+      id: "ins-5",
+      agentId: "line-throughput-agent",
+      agentLabel: "Line Efficiency",
+      title: "Line 1 hit 103% of its daily target",
+      titleBn: "লাইন ১ দৈনিক লক্ষ্যের ১০৩% অর্জন করেছে",
+      finding:
+        "Bundles scanned across the shift on Line 1 came in at 103% of the planned units for the H&M polo PO. SAH consumption is 7% under budget; the surplus opens capacity for the redirected PO-4471 units.",
+      findingBn:
+        "লাইন ১ এ শিফট জুড়ে স্ক্যান করা বান্ডলগুলো H&M পোলো PO এর জন্য পরিকল্পিত ইউনিটের ১০৩% এ এসেছে। SAH খরচ বাজেটের চেয়ে ৭% কম; উদ্বৃত্ত ক্ষমতা পুনর্নির্দেশিত PO-৪৪৭১ ইউনিটের জন্য উন্মুক্ত।",
+      factors: [
+        { label: "Actual vs target", labelBn: "বাস্তব বনাম লক্ষ্য", magnitude: "103%", magnitudeBn: "১০৩%" },
+        { label: "SAH variance", labelBn: "SAH ভ্যারিয়েন্স", magnitude: "−7%", magnitudeBn: "−৭%" }
+      ],
+      recommendation: {
+        title: "Acknowledge and preserve Line 1 capacity",
+        titleBn: "স্বীকার করুন এবং লাইন ১ ক্ষমতা সংরক্ষণ",
+        action: "Hold a 90-minute reserve window for redirected Line 3 units.",
+        actionBn: "পুনর্নির্দেশিত লাইন ৩ ইউনিটের জন্য ৯০ মিনিটের রিজার্ভ উইন্ডো রাখুন।",
+        riskTier: "low",
+        targetStage: "logged"
+      },
+      evidence: [
+        { domain: "orders", count: 1, previewIds: ["po-4471"] },
+        { domain: "inventory", count: 12 }
+      ],
+      stage: "done",
+      createdAt: isoAgo(22 * 60 * 60 * 1000),
+      updatedAt: isoAgo(22 * 60 * 60 * 1000),
+      confidence: 0.95
+    });
+  }
+
+  // 6) Maintenance: routine inspection logged (Logged)
   {
     out.push({
       id: "ins-6",
-      agentId: "automation-agent",
-      agentLabel: "Automation Agent",
-      title: "Daily product sync completed",
-      titleBn: "দৈনিক পণ্য সিঙ্ক সম্পন্ন",
-      finding: "342 products reconciled against the catalogue source; 4 SKUs flagged for review.",
-      findingBn: "৩৪২টি পণ্য ক্যাটালগ উৎসের সাথে সামঞ্জস্য করা হয়েছে; ৪টি SKU পর্যালোচনার জন্য চিহ্নিত।",
-      factors: [],
+      agentId: "maintenance-agent",
+      agentLabel: "Maintenance & Uptime",
+      title: "Weekly bearing sweep completed on Line 2",
+      titleBn: "লাইন ২ এ সাপ্তাহিক বিয়ারিং সুইপ সম্পন্ন",
+      finding:
+        "Routine ultrasonic inspection ran on all 12 sewing machines of Line 2. 11 machines within tolerance, 1 marginal (M-09) booked for re-inspect next week. No production stop required.",
+      findingBn:
+        "লাইন ২ এর সব ১২টি সেলাই মেশিনে রুটিন আল্ট্রাসনিক পরীক্ষা চালানো হয়েছে। ১১টি মেশিন সহনশীলতার মধ্যে, ১টি মার্জিনাল (M-০৯) পরের সপ্তাহে পুনঃপরীক্ষার জন্য বুক করা হয়েছে। উৎপাদন বন্ধ প্রয়োজন নেই।",
+      factors: [
+        { label: "Machines inspected", labelBn: "পরীক্ষিত মেশিন", magnitude: "12", magnitudeBn: "১২" },
+        { label: "Marginal", labelBn: "মার্জিনাল", magnitude: "1", magnitudeBn: "১" }
+      ],
       recommendation: {
         title: "No action required",
         titleBn: "কোনো পদক্ষেপ প্রয়োজন নেই",
@@ -247,7 +259,7 @@ export function buildInsights(
         targetStage: "done"
       },
       evidence: [
-        { domain: "products", count: 342 }
+        { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] }
       ],
       stage: "done",
       createdAt: isoAgo(26 * 60 * 60 * 1000),

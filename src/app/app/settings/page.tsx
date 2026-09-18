@@ -18,7 +18,8 @@ import {
   Sun,
   Moon,
   Monitor,
-  Sparkles
+  Sparkles,
+  FlaskConical
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/useT";
@@ -36,7 +37,7 @@ import { cn } from "@/lib/cn";
 import { goals } from "@/data/goals";
 import { agentService } from "@/services/agent.service";
 
-type SectionId = "profile" | "appearance" | "agents" | "risk" | "notifications" | "data" | "advanced";
+type SectionId = "profile" | "appearance" | "agents" | "risk" | "notifications" | "data" | "experimental" | "advanced";
 
 const SECTIONS: Array<{ id: SectionId; iconKey: string; labelKey: string }> = [
   { id: "profile", iconKey: "Building2", labelKey: "settings.businessProfile" },
@@ -45,6 +46,7 @@ const SECTIONS: Array<{ id: SectionId; iconKey: string; labelKey: string }> = [
   { id: "risk", iconKey: "ShieldAlert", labelKey: "settings.risk" },
   { id: "notifications", iconKey: "Bell", labelKey: "settings.notifications" },
   { id: "data", iconKey: "Database", labelKey: "settings.dataSources" },
+  { id: "experimental", iconKey: "FlaskConical", labelKey: "settings.experimental" },
   { id: "advanced", iconKey: "Wrench", labelKey: "settings.advanced" }
 ];
 
@@ -120,6 +122,7 @@ export default function SettingsPage() {
           {active === "risk" && <RiskSection flash={flash} savedKey={savedKey} />}
           {active === "notifications" && <NotificationsSection flash={flash} savedKey={savedKey} />}
           {active === "data" && <DataSection />}
+          {active === "experimental" && <ExperimentalSection flash={flash} savedKey={savedKey} />}
           {active === "advanced" && <AdvancedSection router={router} />}
         </div>
       </div>
@@ -143,6 +146,8 @@ function SectionIcon({ name }: { name: string }) {
       return <Database size={13} />;
     case "Wrench":
       return <Wrench size={13} />;
+    case "FlaskConical":
+      return <FlaskConical size={13} />;
     default:
       return <Sparkles size={13} />;
   }
@@ -553,7 +558,7 @@ function DataSection() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "thalamus-config.json";
+    a.download = "bunonbrain-config.json";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -610,7 +615,7 @@ function AdvancedSection({ router }: { router: ReturnType<typeof useRouter> }) {
 
   function restartTour() {
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("thalamus:restart-tour"));
+      window.dispatchEvent(new CustomEvent("bunonbrain:restart-tour"));
     }
   }
 
@@ -643,6 +648,43 @@ function AdvancedSection({ router }: { router: ReturnType<typeof useRouter> }) {
         )}
       </Row>
     </Panel>
+  );
+}
+
+function ExperimentalSection({ flash, savedKey }: { flash: (k: string) => void; savedKey: string | null }) {
+  const { t } = useT();
+  const simulatedData = useBusinessStore((s) => s.simulatedData);
+  const setSimulatedData = useBusinessStore((s) => s.setSimulatedData);
+  const featureFlags = useBusinessStore((s) => s.featureFlags);
+  const setFeatureFlag = useBusinessStore((s) => s.setFeatureFlag);
+
+  return (
+    <>
+      <Panel title={t("settings.experimental") as string}>
+        <Row label={t("settings.simulatedData") as string} hint="Add a visible chip to every sensor source row so it's clear the data is synthetic, calibrated against public datasets.">
+          <Toggle
+            checked={simulatedData}
+            onChange={(v) => { setSimulatedData(v); flash("experimental"); }}
+          />
+        </Row>
+      </Panel>
+
+      <Panel className="mt-4" title="Feature flags">
+        <Row label={t("settings.feature.visionRepair") as string} hint={t("settings.featureBody.visionRepair") as string}>
+          <Toggle
+            checked={featureFlags.visionRepair}
+            onChange={(v) => { setFeatureFlag("visionRepair", v); flash("experimental"); }}
+          />
+        </Row>
+        <Row label={t("settings.feature.whatsappAlert") as string} hint={t("settings.featureBody.whatsappAlert") as string}>
+          <Toggle
+            checked={featureFlags.whatsappAlert}
+            onChange={(v) => { setFeatureFlag("whatsappAlert", v); flash("experimental"); }}
+          />
+        </Row>
+        <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="experimental" /></div>
+      </Panel>
+    </>
   );
 }
 

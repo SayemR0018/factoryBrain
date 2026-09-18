@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 type Props = {
   open: boolean;
@@ -17,6 +17,8 @@ type Props = {
 
 export function Drawer({ open, onClose, title, children, side = "right", width = "w-[28rem]", className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -33,26 +35,36 @@ export function Drawer({ open, onClose, title, children, side = "right", width =
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
           className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm"
           onClick={onClose}
         >
           <motion.aside
-            initial={{ x: isSide ? 360 : 0, y: isSide ? 0 : 360, opacity: 0 }}
+            initial={
+              reduceMotion
+                ? { opacity: 0 }
+                : { x: isSide ? 360 : 0, y: isSide ? 0 : 360, opacity: 0 }
+            }
             animate={{ x: 0, y: 0, opacity: 1 }}
-            exit={{ x: isSide ? 360 : 0, y: isSide ? 0 : 360, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            exit={
+              reduceMotion
+                ? { opacity: 0 }
+                : { x: isSide ? 360 : 0, y: isSide ? 0 : 360, opacity: 0 }
+            }
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             role="dialog"
             aria-modal="true"
             tabIndex={-1}
             ref={ref}
             onClick={(e) => e.stopPropagation()}
             className={cn(
-              "absolute bg-surface outline-none flex flex-col",
-              isSide ? cn("top-0 right-0 h-full", width, "border-l border-border-subtle") : "bottom-0 inset-x-0 max-h-[80vh] border-t border-border-subtle rounded-t-xl",
+              "absolute glass-strong outline-none flex flex-col",
+              isSide
+                ? cn("top-0 right-0 h-full", width, "border-l border-border-subtle")
+                : "bottom-0 inset-x-0 max-h-[80vh] border-t border-border-subtle rounded-t-xl",
               className
             )}
           >
@@ -63,7 +75,7 @@ export function Drawer({ open, onClose, title, children, side = "right", width =
                   type="button"
                   onClick={onClose}
                   aria-label="Close"
-                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary"
+                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary transition-colors"
                 >
                   <X size={14} />
                 </button>

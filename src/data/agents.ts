@@ -1,4 +1,5 @@
-// Static agent roster — matches whitepaper's seven sub-agents.
+// BunonBrain — three-agent roster for a Bangladeshi RMG factory floor.
+// Each agent is bound to one or more MCP-style tools under src/services/factory.tools.ts.
 export type AgentDef = {
   id: string;
   name: string;
@@ -14,86 +15,44 @@ export type AgentDef = {
 
 export const agents: AgentDef[] = [
   {
-    id: "sales-analyst",
-    name: "Sales Analyst",
-    nameBn: "সেলস বিশ্লেষক",
-    purpose: "Summarise revenue, customer, and pipeline trends; explain anomalies",
-    purposeBn: "আয়, ক্রেতা ও পাইপলাইন প্রবণতা সারসংক্ষেপ; অসঙ্গতি ব্যাখ্যা",
+    id: "line-throughput-agent",
+    name: "Line Efficiency Agent",
+    nameBn: "লাইন দক্ষতা এজেন্ট",
+    purpose:
+      "Reads line and order data, computes efficiency against target, and names the bottleneck operation dragging the line down.",
+    purposeBn:
+      "লাইন ও অর্ডার ডেটা পড়ে লক্ষ্যমাত্রার বিপরীতে দক্ষতা গণনা করে এবং লাইনকে পিছিয়ে রাখা বটলনেক অপারেশন চিহ্নিত করে।",
     risk: "low",
     execution: "auto",
     model: "Mid-tier reasoning (GPT-4.1-mini / Claude Sonnet small)",
-    contextSlices: ["orders", "customers", "products"],
+    contextSlices: ["lines", "orders", "targets"],
     status: "ready"
   },
   {
-    id: "marketing-agent",
-    name: "Marketing Agent",
-    nameBn: "মার্কেটিং এজেন্ট",
-    purpose: "Draft campaign copy, promos, and social posts in Bangla and English",
-    purposeBn: "বাংলা ও ইংরেজিতে প্রচারণার কপি, প্রমোশন ও সোশ্যাল পোস্ট খসড়া",
-    risk: "medium",
-    execution: "approval_required",
-    model: "Strong creative-writer (Claude Sonnet / GPT-4.1)",
-    contextSlices: ["products", "customers", "campaigns"],
-    status: "ready"
-  },
-  {
-    id: "inventory-agent",
-    name: "Inventory Agent",
-    nameBn: "ইনভেন্টরি এজেন্ট",
-    purpose: "Forecast demand and recommend restocks using statistical baseline + LLM rationale",
-    purposeBn: "পরিসংখ্যানিক ভিত্তি + LLM যুক্তি ব্যবহার করে চাহিদা পূর্বাভাস ও রিস্টক সুপারিশ",
+    id: "maintenance-agent",
+    name: "Maintenance & Uptime Agent",
+    nameBn: "মেইনটেন্যান্স ও আপটাইম এজেন্ট",
+    purpose:
+      "Reads machine sensor data (vibration, temperature, duty cycle) and flags machines trending toward failure before they go down.",
+    purposeBn:
+      "মেশিনের সেন্সর ডেটা (কম্পন, তাপমাত্রা, ডিউটি সাইকেল) পড়ে ব্যর্থতার দিকে এগোচ্ছে এমন মেশিন আগেই চিহ্নিত করে।",
     risk: "medium",
     execution: "auto_suggest_with_threshold",
-    model: "Structured-output (GPT-4.1 json_schema) + Holt-Winters forecast",
-    contextSlices: ["products", "inventory", "orders", "suppliers"],
+    model: "Mid-tier reasoning + structured threshold checks (GPT-4.1-mini)",
+    contextSlices: ["machines", "lines"],
     status: "ready"
   },
   {
-    id: "customer-success",
-    name: "Customer Success",
-    nameBn: "কাস্টমার সাকসেস",
-    purpose: "Surface themes from chat, reviews, and feedback; flag churn risk",
-    purposeBn: "চ্যাট, পর্যালোচনা ও প্রতিক্রিয়া থেকে থিম উন্মোচন; চার্ন ঝুঁকি চিহ্নিত",
+    id: "manager-agent",
+    name: "Manager Orchestrator Agent",
+    nameBn: "ম্যানেজার অর্কেস্ট্রেটর এজেন্ট",
+    purpose:
+      "Routes free-text factory-floor questions to the right sub-agent and generates the daily brief (overnight efficiency, downtime, today's shipment risk) on demand.",
+    purposeBn:
+      "মুক্ত-পাঠ্য কারখানা-তল প্রশ্নগুলো সঠিক সাব-এজেন্টে রাউট করে এবং চাহিদা অনুযায়ী দৈনিক ব্রিফ (রাতের দক্ষতা, ডাউনটাইম, আজকের শিপমেন্ট ঝুঁকি) তৈরি করে।",
     risk: "low",
     execution: "auto",
-    model: "Mid-tier (Claude Sonnet / GPT-4.1-mini)",
-    contextSlices: ["conversations", "customers", "orders"],
-    status: "ready"
-  },
-  {
-    id: "finance-agent",
-    name: "Finance Agent",
-    nameBn: "ফাইন্যান্স এজেন্ট",
-    purpose: "Reason over cashflow, margins, and supplier commitments; every action reviewed",
-    purposeBn: "ক্যাশফ্লো, মার্জিন ও সরবরাহকারী প্রতিশ্রুতি বিশ্লেষণ; প্রতিটি পদক্ষেপ পর্যালোচিত",
-    risk: "high",
-    execution: "approval_required",
-    model: "Frontier-tier (Claude Opus / GPT-5 class)",
-    contextSlices: ["orders", "suppliers", "products", "policies"],
-    status: "ready"
-  },
-  {
-    id: "policy-docs-agent",
-    name: "Policy & Docs Agent",
-    nameBn: "নীতি ও নথি এজেন্ট",
-    purpose: "Interpret return policy, supplier agreements, contracts",
-    purposeBn: "ফেরত নীতি, সরবরাহকারী চুক্তি, চুক্তিপত্র ব্যাখ্যা",
-    risk: "high",
-    execution: "approval_required",
-    model: "Frontier-tier long-context (Claude Opus / GPT-5 class)",
-    contextSlices: ["policies", "suppliers", "conversations"],
-    status: "ready"
-  },
-  {
-    id: "automation-agent",
-    name: "Automation Agent",
-    nameBn: "অটোমেশন এজেন্ট",
-    purpose: "Execute actions on the side-effect surface; risk set per policy",
-    purposeBn: "পার্শ্ব-প্রতিক্রিয়া পৃষ্ঠে পদক্ষেপ কার্যকর; ঝুঁকি নীতি অনুযায়ী",
-    risk: "per_policy" as any,
-    execution: "per_policy",
-    model: "Tool-reliable (Claude Sonnet)",
+    model: "Frontier-tier routing + summarisation (Claude Sonnet / GPT-4.1)",
     contextSlices: ["*"],
     status: "ready"
   }

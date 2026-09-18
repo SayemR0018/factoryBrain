@@ -28,7 +28,7 @@ export const SOURCE_FORMS: Record<string, SourceForm> = {
     title: "Google Sheets",
     fields: [{ key: "url", label: "Sheet URL", type: "url", placeholder: "https://docs.google.com/spreadsheets/…", required: true }],
     validate: (v) => (isValidUrl(v.url) ? null : "Please enter a valid Google Sheets URL."),
-    demoValues: () => ({ url: "https://docs.google.com/spreadsheets/d/demo-thalamus-products" })
+    demoValues: () => ({ url: "https://docs.google.com/spreadsheets/d/demo-bunonbrain-products" })
   },
   shopify: {
     id: "shopify",
@@ -42,7 +42,7 @@ export const SOURCE_FORMS: Record<string, SourceForm> = {
       if (!v.token || v.token.length < 8) return "Token looks too short.";
       return null;
     },
-    demoValues: () => ({ domain: "thalamus-demo.myshopify.com", token: "shpat_demoToken1234" })
+    demoValues: () => ({ domain: "bunonbrain-demo.myshopify.com", token: "shpat_demoToken1234" })
   },
   whatsapp: {
     id: "whatsapp",
@@ -64,14 +64,14 @@ export const SOURCE_FORMS: Record<string, SourceForm> = {
     title: "Facebook",
     fields: [{ key: "url", label: "Page URL", type: "url", placeholder: "https://facebook.com/yourpage", required: true }],
     validate: (v) => (isValidUrl(v.url) ? null : "Please enter a valid URL."),
-    demoValues: () => ({ url: "https://facebook.com/thalamus-demo" })
+    demoValues: () => ({ url: "https://facebook.com/bunonbrain-demo" })
   },
   instagram: {
     id: "instagram",
     title: "Instagram",
     fields: [{ key: "handle", label: "Handle", type: "text", placeholder: "@yourbrand", required: true }],
     validate: (v) => (isValidHandle(v.handle) ? null : "Handles start with @ and use letters, numbers, dot or underscore."),
-    demoValues: () => ({ handle: "@thalamus_demo" })
+    demoValues: () => ({ handle: "@bunonbrain_demo" })
   },
   csv: {
     id: "csv",
@@ -92,12 +92,59 @@ export const SOURCE_FORMS: Record<string, SourceForm> = {
     title: "Documents",
     fields: [{ key: "folder", label: "Drive folder link", type: "url", placeholder: "https://drive.google.com/drive/folders/…", required: true }],
     validate: (v) => (isValidUrl(v.folder) ? null : "Please enter a valid Drive folder URL."),
-    demoValues: () => ({ folder: "https://drive.google.com/drive/folders/thalamus-policies-demo" })
+    demoValues: () => ({ folder: "https://drive.google.com/drive/folders/bunonbrain-policies-demo" })
+  },
+  // BunonBrain sensor feeds — synthetic, calibrated to NASA C-MAPSS, Kaggle
+  // Bosch, and UCI SECOM public datasets. No real hardware required.
+  "rfid-bundles": {
+    id: "rfid-bundles",
+    title: "RFID bundle scans",
+    fields: [
+      { key: "endpoint", label: "Reader endpoint", type: "url", placeholder: "https://rfid.factory.local", required: true },
+      { key: "line", label: "Line scope", type: "text", placeholder: "all lines, or line-1,line-3", required: false }
+    ],
+    validate: (v) => (isValidUrl(v.endpoint) ? null : "Please enter a valid endpoint URL."),
+    demoValues: () => ({ endpoint: "https://rfid.factory.local/demo", line: "all" })
+  },
+  "machine-telemetry": {
+    id: "machine-telemetry",
+    title: "Machine telemetry",
+    fields: [
+      { key: "endpoint", label: "Telemetry endpoint", type: "url", placeholder: "https://telemetry.factory.local", required: true },
+      { key: "interval", label: "Sample interval (seconds)", type: "text", placeholder: "10", required: false }
+    ],
+    validate: (v) => {
+      if (!isValidUrl(v.endpoint)) return "Please enter a valid endpoint URL.";
+      if (v.interval && !/^\d+$/.test(v.interval)) return "Sample interval should be a number of seconds.";
+      return null;
+    },
+    demoValues: () => ({ endpoint: "https://telemetry.factory.local/demo", interval: "10" })
+  },
+  "energy-meter": {
+    id: "energy-meter",
+    title: "Energy meter",
+    fields: [
+      { key: "endpoint", label: "Meter endpoint", type: "url", placeholder: "https://meter.factory.local", required: true },
+      { key: "feed", label: "Feed", type: "text", placeholder: "factory-main", required: false }
+    ],
+    validate: (v) => (isValidUrl(v.endpoint) ? null : "Please enter a valid endpoint URL."),
+    demoValues: () => ({ endpoint: "https://meter.factory.local/demo", feed: "factory-main" })
   }
 };
 
 export function listSourceIds(): string[] {
-  return ["sheets", "shopify", "whatsapp", "facebook", "instagram", "csv", "documents"];
+  return [
+    "rfid-bundles",
+    "machine-telemetry",
+    "energy-meter",
+    "sheets",
+    "shopify",
+    "whatsapp",
+    "facebook",
+    "instagram",
+    "csv",
+    "documents"
+  ];
 }
 
 export function isValidUrl(s: string | undefined | null): boolean {

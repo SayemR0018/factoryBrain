@@ -11,12 +11,12 @@ export type SearchKind =
   | "insight"
   | "approval"
   | "activity"
-  | "product"
-  | "customer"
+  | "order"
+  | "buyer"
   | "supplier"
-  | "policy"
-  | "workflow"
-  | "goal"
+  | "compliance"
+  | "process"
+  | "target"
   | "risk"
   | "integration"
   | "setting";
@@ -49,16 +49,16 @@ const PAGE_HINTS_EN: Record<string, { title: string; hint: string; titleBn: stri
     hintBn: "KPI · আজ গুরুত্বপূর্ণ · সাম্প্রতিক কার্যকলাপ"
   },
   "/app/ask": {
-    title: "Ask Thalamus",
+    title: "Ask BunonBrain",
     hint: "Natural-language answers with evidence",
-    titleBn: "থ্যালামাসকে জিজ্ঞাসা করুন",
+    titleBn: "বুননব্রেইনকে জিজ্ঞাসা করুন",
     hintBn: "প্রমাণসহ প্রাকৃতিক ভাষার উত্তর"
   },
   "/app/brain": {
-    title: "Business Brain",
-    hint: "Graph of products, customers, policies, risks",
-    titleBn: "বিজনেস ব্রেইন",
-    hintBn: "পণ্য, ক্রেতা, নীতি ও ঝুঁকির গ্রাফ"
+    title: "Factory Brain",
+    hint: "Graph of lines, machines, orders, suppliers, risks",
+    titleBn: "ফ্যাক্টরি ব্রেইন",
+    hintBn: "লাইন, মেশিন, অর্ডার, সরবরাহকারী ও ঝুঁকির গ্রাফ"
   },
   "/app/insights": {
     title: "Insights",
@@ -68,9 +68,9 @@ const PAGE_HINTS_EN: Record<string, { title: string; hint: string; titleBn: stri
   },
   "/app/agents": {
     title: "Workforce",
-    hint: "The seven agents assembled for your business",
+    hint: "The three agents assembled for your factory",
     titleBn: "কর্মী বাহিনী",
-    hintBn: "আপনার ব্যবসার জন্য সাতটি এজেন্ট"
+    hintBn: "আপনার কারখানার জন্য গঠিত তিনটি এজেন্ট"
   },
   "/app/approvals": {
     title: "Approvals",
@@ -207,7 +207,7 @@ export const searchService = {
     for (const p of dataset.products.slice(0, 60)) {
       out.push({
         id: `product:${p.id}`,
-        kind: "product",
+        kind: "order",
         title: p.name,
         hint: `${p.category} · ${p.sku}`,
         titleBn: p.nameBn,
@@ -216,12 +216,12 @@ export const searchService = {
         weight: 0.5
       });
     }
-    // Customers (top 25 by LTV — picked from graph)
-    const customerNodes = dataset.graph.nodes.filter((n) => n.kind === "customer");
-    for (const c of customerNodes.slice(0, 25)) {
+    // Buyers (top 25 by LTV — picked from graph)
+    const buyerNodes = dataset.graph.nodes.filter((n) => n.kind === "buyer");
+    for (const c of buyerNodes.slice(0, 25)) {
       out.push({
-        id: `customer:${c.id}`,
-        kind: "customer",
+        id: `buyer:${c.id}`,
+        kind: "buyer",
         title: c.label,
         hint: `${c.meta?.region ?? ""} · LTV ৳${(c.meta?.ltv ?? 0).toLocaleString("en-IN")}`,
         titleBn: c.label,
@@ -247,7 +247,7 @@ export const searchService = {
     for (const p of dataset.policies) {
       out.push({
         id: `policy:${p.id}`,
-        kind: "policy",
+        kind: "compliance",
         title: p.title,
         hint: p.type.replace(/-/g, " "),
         titleBn: p.titleBn,
@@ -256,27 +256,27 @@ export const searchService = {
         weight: 0.6
       });
     }
-    // Workflows + goals + risks (from graph)
+    // Processes + targets + risks (from graph)
     for (const n of dataset.graph.nodes) {
-      if (n.kind === "workflow") {
+      if (n.kind === "process") {
         out.push({
-          id: `workflow:${n.id}`,
-          kind: "workflow",
+          id: `process:${n.id}`,
+          kind: "process",
           title: n.label,
-          hint: "Workflow",
+          hint: "Process",
           titleBn: n.labelBn,
-          hintBn: "কর্মপ্রবাহ",
+          hintBn: "প্রক্রিয়া",
           href: `/app/brain?node=${n.id}`,
           weight: 0.5
         });
-      } else if (n.kind === "goal") {
+      } else if (n.kind === "target") {
         out.push({
-          id: `goal:${n.id}`,
-          kind: "goal",
+          id: `target:${n.id}`,
+          kind: "target",
           title: n.label,
-          hint: "Business goal",
+          hint: "Production target",
           titleBn: n.labelBn,
-          hintBn: "ব্যবসায়িক লক্ষ্য",
+          hintBn: "উৎপাদন লক্ষ্য",
           href: `/app/brain?node=${n.id}`,
           weight: 0.55
         });
@@ -385,20 +385,20 @@ export const searchService = {
       Picked from the most prominent items in the index. */
   suggestions(locale: "en" | "bn"): string[] {
     const en = [
-      "approvals waiting",
-      "Dhaka revenue",
-      "restock",
-      "return policy",
-      "Sales Analyst",
-      "Shopify"
+      "line throughput",
+      "Line 3 efficiency",
+      "machine health",
+      "compressor energy",
+      "Higg FEM",
+      "Line Throughput"
     ];
     const bn = [
-      "অনুমোদন",
-      "ঢাকা আয়",
-      "রিস্টক",
-      "ফেরত নীতি",
-      "সেলস বিশ্লেষক",
-      "শপিফাই"
+      "লাইন দক্ষতা",
+      "লাইন ৩ দক্ষতা",
+      "মেশিন স্বাস্থ্য",
+      "কম্প্রেসর শক্তি",
+      "হিগ ফেম",
+      "লাইন থ্রুপুট"
     ];
     return (locale === "bn" ? bn : en).slice();
   }

@@ -24,7 +24,7 @@ export const agentService = {
         status: a.status,
         tasksToday: tasks,
         recentCount: recent,
-        glyph: (AGENT_GLYPH[a.id] ?? "automation") as AgentGlyph
+        glyph: (AGENT_GLYPH[a.id] ?? "orchestrator") as AgentGlyph
       };
     });
   },

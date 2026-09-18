@@ -15,7 +15,7 @@ export default function WelcomePage() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        <BrandMark size={56} framed />
+        <BrandMark size={56} framed reveal />
       </motion.div>
       <motion.div
         initial={{ opacity: 0, y: 12 }}

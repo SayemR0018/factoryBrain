@@ -13,6 +13,8 @@ export type BusinessProfile = {
   whatYouSell: string;
   customers: string;
   goals: string[];
+  /** Factory the user is running (one factory per workspace). */
+  factoryName?: string;
 };
 
 export type IngestionSource = {
@@ -50,8 +52,12 @@ type BusinessState = {
   density: "comfortable" | "compact";
   /** Global pause flag. */
   globalPaused: boolean;
-  /** Agent currently pre-selected from the Ask Thalamus page. */
+  /** Agent currently pre-selected from the Ask BunonBrain page. */
   selectedAgentId: string | null;
+  /** Feature flags for stretch / experimental functionality. */
+  featureFlags: { visionRepair: boolean; whatsappAlert: boolean };
+  /** Whether the simulated-data badge is shown on sensor feeds. */
+  simulatedData: boolean;
   setProfile: (p: Partial<BusinessProfile>) => void;
   completeOnboarding: () => void;
   upsertSource: (id: string, patch: Partial<IngestionSource>) => void;
@@ -64,6 +70,8 @@ type BusinessState = {
   setDensity: (d: BusinessState["density"]) => void;
   setGlobalPaused: (v: boolean) => void;
   setSelectedAgent: (id: string | null) => void;
+  setFeatureFlag: (key: keyof BusinessState["featureFlags"], v: boolean) => void;
+  setSimulatedData: (v: boolean) => void;
   /** Returns all config as a JSON-safe blob. */
   exportConfig(): string;
   /** Replaces state from a previously-exported JSON blob. */
@@ -85,6 +93,9 @@ const defaultProfile: BusinessProfile = {
 };
 
 const defaultSources: IngestionSource[] = [
+  { id: "rfid-bundles", connected: false, lastSync: null, objectTypes: ["orders"], records: 0 },
+  { id: "machine-telemetry", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
+  { id: "energy-meter", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
   { id: "sheets", connected: false, lastSync: null, objectTypes: ["products", "orders"], records: 0 },
   { id: "shopify", connected: false, lastSync: null, objectTypes: ["products", "orders", "customers"], records: 0 },
   { id: "whatsapp", connected: false, lastSync: null, objectTypes: ["conversations"], records: 0 },
@@ -95,85 +106,100 @@ const defaultSources: IngestionSource[] = [
 ];
 
 export const useBusinessStore = create<BusinessState>((set, get) => ({
-  onboardingComplete: safeGet<boolean>("thalamus:onboardingComplete", false),
-  profile: safeGet<BusinessProfile>("thalamus:profile", defaultProfile),
-  sources: safeGet<IngestionSource[]>("thalamus:sources", defaultSources),
-  agentMode: safeGet<Record<string, "auto" | "approval" | "paused">>("thalamus:agentMode", {}),
-  thresholds: safeGet<BusinessState["thresholds"]>("thalamus:thresholds", {
+  onboardingComplete: safeGet<boolean>("bunonbrain:onboardingComplete", false),
+  profile: safeGet<BusinessProfile>("bunonbrain:profile", defaultProfile),
+  sources: safeGet<IngestionSource[]>("bunonbrain:sources", defaultSources),
+  agentMode: safeGet<Record<string, "auto" | "approval" | "paused">>("bunonbrain:agentMode", {}),
+  thresholds: safeGet<BusinessState["thresholds"]>("bunonbrain:thresholds", {
     orderValueBdt: 25000,
     discountPct: 10,
     inventorySpendBdt: 25000,
     messageVolume: 50
   }),
-  approvalGate: safeGet<BusinessState["approvalGate"]>("thalamus:approvalGate", {
+  approvalGate: safeGet<BusinessState["approvalGate"]>("bunonbrain:approvalGate", {
     low: false,
     medium: true,
     high: true
   }),
-  autoApproveBelow: safeGet<BusinessState["autoApproveBelow"]>("thalamus:autoApproveBelow", "low"),
-  notifications: safeGet<BusinessState["notifications"]>("thalamus:notifications", {
+  autoApproveBelow: safeGet<BusinessState["autoApproveBelow"]>("bunonbrain:autoApproveBelow", "low"),
+  notifications: safeGet<BusinessState["notifications"]>("bunonbrain:notifications", {
     inApp: true,
     email: false,
     whatsapp: false,
     digestTime: "08:00"
   }),
-  density: safeGet<BusinessState["density"]>("thalamus:density", "comfortable"),
-  globalPaused: safeGet<boolean>("thalamus:globalPaused", false),
-  selectedAgentId: safeGet<string | null>("thalamus:selectedAgentId", null),
+  density: safeGet<BusinessState["density"]>("bunonbrain:density", "comfortable"),
+  globalPaused: safeGet<boolean>("bunonbrain:globalPaused", false),
+  selectedAgentId: safeGet<string | null>("bunonbrain:selectedAgentId", null),
+  featureFlags: safeGet<BusinessState["featureFlags"]>("bunonbrain:featureFlags", {
+    visionRepair: false,
+    whatsappAlert: true
+  }),
+  simulatedData: safeGet<boolean>("bunonbrain:simulatedData", true),
   setProfile: (p) => {
     const next = { ...get().profile, ...p };
-    storage.set("thalamus:profile", next);
+    storage.set("bunonbrain:profile", next);
     set({ profile: next });
   },
   completeOnboarding: () => {
-    storage.set("thalamus:onboardingComplete", true);
+    storage.set("bunonbrain:onboardingComplete", true);
     set({ onboardingComplete: true });
   },
   upsertSource: (id, patch) => {
     const next = get().sources.map((s) => (s.id === id ? { ...s, ...patch } : s));
-    storage.set("thalamus:sources", next);
+    storage.set("bunonbrain:sources", next);
     set({ sources: next });
   },
   bumpSource: (id, records) => {
     const next = get().sources.map((s) => (s.id === id ? { ...s, records: Math.max(0, s.records + records) } : s));
-    storage.set("thalamus:sources", next);
+    storage.set("bunonbrain:sources", next);
     set({ sources: next });
   },
   setAgentMode: (id, mode) => {
     const next = { ...get().agentMode, [id]: mode };
-    storage.set("thalamus:agentMode", next);
+    storage.set("bunonbrain:agentMode", next);
     set({ agentMode: next });
   },
   setThresholds: (t) => {
     const next = { ...get().thresholds, ...t };
-    storage.set("thalamus:thresholds", next);
+    storage.set("bunonbrain:thresholds", next);
     set({ thresholds: next });
   },
   setApprovalGate: (g) => {
     const next = { ...get().approvalGate, ...g };
-    storage.set("thalamus:approvalGate", next);
+    storage.set("bunonbrain:approvalGate", next);
     set({ approvalGate: next });
   },
   setAutoApproveBelow: (v) => {
-    storage.set("thalamus:autoApproveBelow", v);
+    storage.set("bunonbrain:autoApproveBelow", v);
     set({ autoApproveBelow: v });
   },
   setNotifications: (n) => {
     const next = { ...get().notifications, ...n };
-    storage.set("thalamus:notifications", next);
+    storage.set("bunonbrain:notifications", next);
     set({ notifications: next });
   },
   setDensity: (d) => {
-    storage.set("thalamus:density", d);
+    storage.set("bunonbrain:density", d);
     set({ density: d });
   },
   setGlobalPaused: (v) => {
-    storage.set("thalamus:globalPaused", v);
+    storage.set("bunonbrain:globalPaused", v);
     set({ globalPaused: v });
   },
   setSelectedAgent: (id) => {
-    storage.set("thalamus:selectedAgentId", id);
+    storage.set("bunonbrain:selectedAgentId", id);
     set({ selectedAgentId: id });
+  },
+  setFeatureFlag: (key, v) => {
+    const cur = get().featureFlags;
+    const next = { ...cur, [key]: v };
+    storage.set("bunonbrain:featureFlags", next);
+    set({ featureFlags: next });
+  },
+  setSimulatedData: (v) => {
+    storage.set("bunonbrain:simulatedData", v);
+    set({ simulatedData: v });
   },
   exportConfig() {
     const s = get();
@@ -207,14 +233,14 @@ export const useBusinessStore = create<BusinessState>((set, get) => ({
       // Persist each
       const cur = get();
       const merged = { ...cur, ...next } as BusinessState;
-      if (next.profile) storage.set("thalamus:profile", merged.profile);
-      if (next.sources) storage.set("thalamus:sources", merged.sources);
-      if (next.agentMode) storage.set("thalamus:agentMode", merged.agentMode);
-      if (next.thresholds) storage.set("thalamus:thresholds", merged.thresholds);
-      if (next.approvalGate) storage.set("thalamus:approvalGate", merged.approvalGate);
-      if (next.autoApproveBelow) storage.set("thalamus:autoApproveBelow", merged.autoApproveBelow);
-      if (next.notifications) storage.set("thalamus:notifications", merged.notifications);
-      if (next.density) storage.set("thalamus:density", merged.density);
+      if (next.profile) storage.set("bunonbrain:profile", merged.profile);
+      if (next.sources) storage.set("bunonbrain:sources", merged.sources);
+      if (next.agentMode) storage.set("bunonbrain:agentMode", merged.agentMode);
+      if (next.thresholds) storage.set("bunonbrain:thresholds", merged.thresholds);
+      if (next.approvalGate) storage.set("bunonbrain:approvalGate", merged.approvalGate);
+      if (next.autoApproveBelow) storage.set("bunonbrain:autoApproveBelow", merged.autoApproveBelow);
+      if (next.notifications) storage.set("bunonbrain:notifications", merged.notifications);
+      if (next.density) storage.set("bunonbrain:density", merged.density);
       set(merged);
       return { ok: true };
     } catch (e) {

@@ -11,8 +11,10 @@ import {
   ShieldCheck,
   Activity,
   PlugZap,
-  Settings
+  Settings,
+  ScanLine
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/useT";
 import { approvalService } from "@/services/approval.service";
@@ -25,6 +27,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { t } = useT();
   const mounted = useMounted();
+  const reduceMotion = useReducedMotion();
 
   // Live counts for unread badges. We re-derive on a soft tick.
   const [tick, setTick] = useState(0);
@@ -76,11 +79,17 @@ export function Sidebar() {
     }
   ];
 
+  // Vision Repair is gated behind a feature flag.
+  const visionEnabled = useBusinessStore.getState().featureFlags?.visionRepair;
+  if (visionEnabled) {
+    groups[groups.length - 1].items.push({ href: "/app/vision", label: t("nav.vision"), icon: ScanLine });
+  }
+
   return (
     <aside className="bg-sidebar h-full w-60 shrink-0 border-r border-border-subtle flex flex-col">
       <div className="px-4 h-14 flex items-center border-b border-border-subtle">
-        <Link href="/app" className="flex items-center gap-2 group">
-          <div className="size-6 rounded bg-[var(--accent-soft)] border border-[var(--accent-border)] flex items-center justify-center">
+        <Link href="/app" className="flex items-center gap-2 group press">
+          <div className="size-6 rounded bg-[var(--accent-soft)] border border-[var(--accent-border)] flex items-center justify-center transition-colors group-hover:bg-[var(--accent-soft)]/80">
             <div className="size-2 rounded-full bg-accent" />
           </div>
           <span className="text-body font-semibold tracking-tight">{t("app.name")}</span>
@@ -101,18 +110,39 @@ export function Sidebar() {
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-2.5 h-8 px-2 rounded-md text-caption transition-colors",
+                        "group relative flex items-center gap-2.5 h-8 px-2 rounded-md text-caption",
+                        "transition-[background-color,color] duration-150",
+                        "press",
                         active
                           ? "bg-surface-2 text-fg-primary"
                           : "text-fg-secondary hover:text-fg-primary hover:bg-surface"
                       )}
                     >
-                      <Icon size={15} className={active ? "text-accent" : ""} />
+                      {active && !reduceMotion && (
+                        <motion.span
+                          layoutId="sidebar-active"
+                          className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-accent"
+                          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                        />
+                      )}
+                      <Icon
+                        size={15}
+                        className={cn(
+                          "transition-colors",
+                          active ? "text-accent" : "group-hover:text-accent/80"
+                        )}
+                      />
                       <span className="truncate flex-1">{item.label}</span>
                       {item.badge != null && item.badge > 0 && (
-                        <span className="mono-pill text-[var(--accent-fg-on-bg)] bg-accent rounded-full px-1.5 py-0 text-[10px]">
+                        <motion.span
+                          key={item.badge}
+                          initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 460, damping: 30 }}
+                          className="mono-pill text-[var(--accent-fg-on-bg)] bg-accent rounded-full px-1.5 py-0 text-[10px]"
+                        >
                           {item.badge}
-                        </span>
+                        </motion.span>
                       )}
                     </Link>
                   </li>

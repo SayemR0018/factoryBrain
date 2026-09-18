@@ -3,19 +3,21 @@
 
 export const en = {
   app: {
-    name: "THALAMUS",
-    tagline: "Understands your business, then assembles the AI that runs it."
+    name: "BunonBrain",
+    tagline: "The Central Intelligence for the Smart Factory.",
+    simulatedBadge: "Simulated data"
   },
   nav: {
     overview: "Overview",
-    ask: "Ask Thalamus",
-    brain: "Business Brain",
+    ask: "Ask BunonBrain",
+    brain: "Factory Brain",
     insights: "Insights",
     agents: "Agents",
     approvals: "Approvals",
     activity: "Activity",
     integrations: "Integrations",
-    settings: "Settings"
+    settings: "Settings",
+    vision: "Vision repair"
   },
   sidebar: {
     overview: "OVERVIEW",
@@ -43,8 +45,8 @@ export const en = {
     nothingImportant: "Nothing pinned yet."
   },
   ask: {
-    title: "Ask Thalamus",
-    placeholder: "Ask anything about your business…",
+    title: "Ask BunonBrain",
+    placeholder: "Ask anything about your factory…",
     placeholderBn: "বাংলায় লিখুন অথবা ইংরেজি — যেটা আপনার সুবিধা।",
     submit: "Ask",
     suggestions: "Try one of these",
@@ -70,18 +72,39 @@ export const en = {
     liveMode: "Live model"
   },
   brain: {
-    title: "Business Brain",
-    subtitle: "What THALAMUS has understood about your business.",
+    title: "Factory Brain",
+    subtitle: "What BunonBrain has understood about your production floor.",
     legend: "Legend",
     filter: "Filter",
     entity: {
-      product: "Product",
-      customer: "Customer",
+      product: "Order",
+      customer: "Buyer",
       supplier: "Supplier",
-      policy: "Policy",
-      workflow: "Workflow",
-      goal: "Goal",
-      risk: "Risk"
+      policy: "Compliance",
+      workflow: "Process",
+      goal: "Target",
+      risk: "Risk",
+      line: "Line",
+      machine: "Machine",
+      order: "Order",
+      buyer: "Buyer",
+      process: "Process",
+      target: "Target",
+      compliance: "Compliance"
+    },
+    status: {
+      healthy: "Healthy",
+      at_risk: "At risk",
+      down: "Down"
+    },
+    edgeKind: {
+      assigned_to: "Assigned to",
+      contains: "Contains",
+      follows: "Follows",
+      has: "Has",
+      threatens: "Threatens",
+      sourced_from: "Sourced from",
+      shipped_to: "Shipped to"
     },
     detailTitle: "Detail",
     neighbors: "Connected",
@@ -114,7 +137,7 @@ export const en = {
   },
   agents: {
     title: "Workforce",
-    subtitle: "The seven agents assembled for your business.",
+    subtitle: "The three agents assembled for your factory by BunonBrain.",
     detail: {
       purpose: "Purpose",
       contextSlices: "Context slices read",
@@ -171,7 +194,7 @@ export const en = {
   },
   integrations: {
     title: "Integrations",
-    subtitle: "Where THALAMUS pulls your business signal from.",
+    subtitle: "Where BunonBrain pulls your factory signal from.",
     lastSync: "Last sync",
     syncNow: "Sync now",
     connect: "Connect",
@@ -185,7 +208,9 @@ export const en = {
     syncSuccess: "Synced.",
     empty: "Nothing connected yet.",
     emptyCta: "Connect a source",
-    edit: "Edit"
+    edit: "Edit",
+    simulated: "Simulated",
+    simulatedTip: "This feed is synthetic. Patterns are calibrated to NASA C-MAPSS, Kaggle Bosch, and UCI SECOM public datasets. A real pilot needs a hardware partner."
   },
   connect: {
     fields: {
@@ -264,7 +289,18 @@ export const en = {
     exportConfig: "Export configuration",
     importConfig: "Import configuration",
     businessName: "Business name",
-    city: "City"
+    city: "City",
+    factoryName: "Factory name",
+    experimental: "Experimental features",
+    feature: {
+      visionRepair: "Vision-to-repair instruction",
+      whatsappAlert: "WhatsApp-style alert view"
+    },
+    featureBody: {
+      visionRepair: "Upload a defect photo and get a short repair instruction in Bangla + English. Uses the same LLM plumbing.",
+      whatsappAlert: "Show alert events in a WhatsApp chat-bubble stream inside Activity."
+    },
+    simulatedData: "Simulated data badge on sensor feeds"
   },
   tour: {
     restart: "Restart product tour",
@@ -274,49 +310,49 @@ export const en = {
     done: "Done",
     stepOf: "Step {n} of {total}",
     steps: {
-      overviewKpis: { title: "Overview at a glance", body: "Revenue, active customers and inventory health — all derived from the live dataset, not hardcoded numbers." },
+      overviewKpis: { title: "Overview at a glance", body: "Line efficiency, active orders and machine health — all derived from the live dataset, not hardcoded numbers." },
       overviewImportant: { title: "Important today", body: "Top insights by risk and confidence. Click any row to jump into the insight." },
       overviewActions: { title: "Recommended actions", body: "Pending approvals surfaced here. Approve or reject inline; the rest of the app updates instantly." },
       ask: { title: "Ask in Bangla or English", body: "Every answer carries evidence. Bangla questions get Bangla answers." },
-      brain: { title: "Business Brain", body: "A graph of what THALUS has understood about your business. Hover to inspect, click for the full record." },
+      brain: { title: "Factory Brain", body: "A graph of what Factory Brain has understood about your floor. Hover to inspect, click for the full record." },
       insights: { title: "Insights pipeline", body: "Each insight walks the stages. Filter by agent or risk." },
-      agents: { title: "Workforce constellation", body: "The seven agents orbit the Business Brain. Run any agent from the side panel." },
+      agents: { title: "Workforce constellation", body: "The three agents orbit the Factory Brain. Run any agent from the side panel." },
       approvals: { title: "Approvals with risk tiers", body: "High-risk actions wait here. Approve, reject with a reason, or use the keyboard: a, r, j, k." },
       activity: { title: "Audit log", body: "Every decision lands here. Nothing happens off the record." },
-      integrations: { title: "Sources", body: "Connect Sheets, Shopify, WhatsApp, CSV. Demo mode lets you walk every flow without a real account." },
+      integrations: { title: "Sources", body: "Connect sensors, ERP, WhatsApp, CSV. Demo mode lets you walk every flow without a real account." },
       settings: { title: "Settings", body: "Per-agent autonomy, risk thresholds, language and theme." },
-      search: { title: "Search everything", body: "⌘K / Ctrl+K finds products, insights, settings fields — with deep links and a highlight on the target." }
+      search: { title: "Search everything", body: "⌘K / Ctrl+K finds orders, insights, settings fields — with deep links and a highlight on the target." }
     }
   },
   onboarding: {
     welcome: {
-      eyebrow: "THALAMUS",
-      headline: "THALAMUS understands your business, then assembles the AI that runs it.",
+      eyebrow: "BUNONBRAIN",
+      headline: "BunonBrain reads your floor, then assembles the AI that runs it.",
       cta: "Start"
     },
     profile: {
-      title: "Tell us about your business",
-      subtitle: "These answers seed the Business Brain and come back to you by name.",
+      title: "Tell us about your factory",
+      subtitle: "These answers seed BunonBrain and come back to you by name.",
       industry: "Industry",
-      industryPlaceholder: "e.g. Fashion retail, FMCG, Electronics",
-      whatYouSell: "What do you sell?",
-      whatYouSellPlaceholder: "Two or three sentences about your products and price range.",
-      customers: "Who are your customers?",
-      customersPlaceholder: "Where they live, how they buy, what they care about.",
+      industryPlaceholder: "e.g. RMG, knit, woven, denim",
+      whatYouSell: "What do you produce?",
+      whatYouSellPlaceholder: "Two or three sentences about your lines, SKUs and lead times.",
+      customers: "Who are your buyers?",
+      customersPlaceholder: "Which brands, what regions, what MOQs.",
       goals: "Top goals (pick up to three)",
       goalOptions: [
-        "Grow repeat purchases",
-        "Reduce stockouts",
-        "Cut slow-moving inventory",
-        "Improve customer response time",
-        "Cut marketing waste",
-        "Expand to new channels",
-        "Improve cashflow visibility"
+        "Improve line efficiency",
+        "Reduce machine downtime",
+        "Cut fabric waste",
+        "Hit on-time shipment rate",
+        "Reduce energy cost per piece",
+        "Pass buyer compliance audits",
+        "Improve worker safety"
       ],
       cta: "Continue"
     },
     connect: {
-      title: "Connect your business",
+      title: "Connect your factory",
       subtitle: "Demo connections below. No real third-party account is needed.",
       sources: {
         sheets: "Google Sheets",
@@ -331,22 +367,22 @@ export const en = {
       needOne: "Connect at least one source to continue."
     },
     understanding: {
-      title: "Understanding your business",
+      title: "Understanding your factory",
       subtitle: "Seven derivation steps, all run against your data.",
       steps: {
-        products: "Products identified",
-        customers: "Customers identified",
-        salesPatterns: "Sales patterns identified",
-        inventory: "Inventory structure identified",
-        goals: "Goals identified",
-        policies: "Policies identified",
+        lines: "Lines identified",
+        machines: "Machines identified",
+        orders: "Orders identified",
+        buyers: "Buyers identified",
+        suppliers: "Suppliers identified",
+        compliance: "Compliance docs identified",
         graph: "Knowledge graph construction"
       }
     },
     ready: {
-      title: "Your Business Brain is ready",
-      lineEn: "{products} products, {customers} customers and {goals} goals identified for {business}.",
-      cta: "Open Business Brain"
+      title: "Your BunonBrain is ready",
+      lineEn: "{products} lines, {customers} buyers and {goals} targets identified for {business}.",
+      cta: "Open BunonBrain"
     }
   },
   risk: {
@@ -377,15 +413,52 @@ export const en = {
       insight: "Insight",
       approval: "Approval",
       activity: "Activity",
-      product: "Product",
-      customer: "Customer",
+      product: "Order",
+      customer: "Buyer",
       supplier: "Supplier",
-      policy: "Policy",
-      workflow: "Workflow",
-      goal: "Goal",
+      policy: "Compliance",
+      workflow: "Process",
+      goal: "Target",
       risk: "Risk",
+      line: "Line",
+      machine: "Machine",
       integration: "Integration",
       setting: "Setting"
+    }
+  },
+  topbar: {
+    factory: "Factory",
+    scope: "scope",
+    lines: "{n} lines"
+  },
+  whatsapp: {
+    alert: {
+      title: "Supervisor alerts",
+      subtitle: "Streaming from the synthetic factory floor.",
+      empty: "No alerts right now."
+    }
+  },
+  vision: {
+    title: "Vision-to-repair",
+    body: "Upload a defect photo to get a short repair instruction in Bangla + English. Demo data only.",
+    upload: "Upload a defect photo",
+    choose: "Choose one of the staged images",
+    resultEn: "Repair instruction (English)",
+    resultBn: "Repair instruction (Bangla)",
+    repairTitle: "Repair instruction",
+    none: "No image selected yet."
+  },
+  factory: {
+    labels: {
+      line: "Line",
+      machine: "Machine",
+      process: "Process",
+      target: "Target",
+      order: "Order",
+      buyer: "Buyer",
+      supplier: "Supplier",
+      compliance: "Compliance",
+      risk: "Risk"
     }
   }
 } as const;

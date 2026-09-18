@@ -35,6 +35,7 @@ import { EvidenceBlock } from "@/components/evidence/EvidenceBlock";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { motionTokens } from "@/lib/motion";
 import { cn } from "@/lib/cn";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { AgentAvatar, AGENT_PALETTE, AGENT_GLYPH, type AgentGlyph } from "@/components/agents/AgentAvatar";
 import type { StreamChunk, AskAnswer, RiskTier } from "@/services/types";
 import { useAskStore, type AskRecord } from "@/store/ask.store";
@@ -87,7 +88,7 @@ export default function AskPage() {
     const id = `ask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     currentIdRef.current = id;
     try {
-      const pack = askService.buildContextPack(finalQ);
+      const pack = askService.buildContextPack(finalQ, selectedAgentId);
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -229,8 +230,8 @@ export default function AskPage() {
     const id = `ins-ask-${Date.now().toString(36)}`;
     insightService.upsertCustom?.({
       id,
-      agentId: "ask-thalamus",
-      agentLabel: "Ask Thalamus",
+      agentId: selectedAgentId ?? "manager-agent",
+      agentLabel: selectedAgentId ? (agentService.get(selectedAgentId)?.name ?? "Manager Orchestrator") : "Manager Orchestrator",
       title: query,
       titleBn: query,
       finding: finding?.data?.en ?? "",
@@ -379,8 +380,27 @@ export default function AskPage() {
           </AnimatePresence>
 
           {streaming && blocks.length > 0 && blocks[blocks.length - 1].type !== "done" && (
-            <div className="flex items-center gap-2 text-caption text-fg-tertiary">
-              <Loader2 size={12} className="animate-spin" /> {t("ask.streamingThinking")}
+            <div className="surface-2 p-4 space-y-2 max-w-prose" aria-live="polite">
+              <div className="flex items-center gap-2 text-caption text-fg-tertiary">
+                <Loader2 size={12} className="animate-spin" /> {t("ask.streamingThinking")}
+              </div>
+              <Skeleton className="h-3 w-[80%]" />
+              <Skeleton className="h-3 w-[68%]" />
+              <Skeleton className="h-3 w-[55%]" />
+            </div>
+          )}
+
+          {streaming && blocks.length === 0 && (
+            <div className="surface-2 p-4 space-y-3 max-w-prose" aria-live="polite">
+              <div className="flex items-center gap-2 text-caption text-fg-tertiary">
+                <Loader2 size={12} className="animate-spin" /> {t("ask.streamingThinking")}
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-[88%]" />
+                <Skeleton className="h-3 w-[72%]" />
+                <Skeleton className="h-3 w-[60%]" />
+                <Skeleton className="h-3 w-[40%]" />
+              </div>
             </div>
           )}
 

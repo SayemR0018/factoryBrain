@@ -7,6 +7,7 @@ import { activityService } from "@/services/activity.service";
 import { Panel } from "@/components/ui/Panel";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelative } from "@/lib/format";
+import { WhatsAppAlert } from "@/components/activity/WhatsAppAlert";
 
 const outcomeStyles: Record<string, string> = {
   approved: "text-risk-low bg-risk-low/15 border-risk-low/30",
@@ -24,6 +25,10 @@ export default function ActivityPage() {
     <div className="px-6 md:px-8 py-6 max-w-4xl mx-auto" data-tour="activity">
       <h1 className="text-display font-semibold tracking-tight">{t("activity.title")}</h1>
       <p className="mt-1 text-caption text-fg-tertiary">{t("activity.subtitle")}</p>
+
+      <div className="mt-6">
+        <WhatsAppAlert />
+      </div>
 
       <Panel className="mt-6">
         {items.length === 0 ? (

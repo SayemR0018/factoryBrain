@@ -73,8 +73,8 @@ export const approvalService = {
         outcome: "executed",
         isoDate: new Date().toISOString()
       });
-      // Brain update: an approved restock lowers the stockout-risk node.
-      lowerStockoutRiskIfPresent(insight);
+      // Brain update: an approved maintenance insight lowers the machine-downtime risk node.
+      lowerMachineRiskIfPresent(insight);
       setTimeout(() => {
         insight.stage = "logged";
         insight.updatedAt = new Date().toISOString();
@@ -102,9 +102,9 @@ export const approvalService = {
   }
 };
 
-function lowerStockoutRiskIfPresent(insight: InsightPublic) {
-  if (insight.agentId !== "inventory-agent") return;
-  const node = dataset.graph.nodes.find((n) => n.kind === "risk" && /stock/i.test(n.label));
+function lowerMachineRiskIfPresent(insight: InsightPublic) {
+  if (insight.agentId !== "maintenance-agent") return;
+  const node = dataset.graph.nodes.find((n) => n.kind === "risk" && /(machine|downtime|bearing)/i.test(n.label));
   if (node && node.meta) {
     node.meta = { ...node.meta, severity: "medium" };
   }

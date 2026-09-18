@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useT } from "@/lib/useT";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -12,16 +13,27 @@ type Props = {
   withWordmark?: boolean;
   /** Force the raster PNG (true) or the inline SVG glyph (false). */
   usePng?: boolean;
+  /** When true, run the SVG stroke draw-on once on mount. */
+  reveal?: boolean;
 };
 
 /**
- * Brand mark for THALAMUS. Renders the supplied PNG when available,
+ * Brand mark for BunonBrain. Renders the supplied PNG when available,
  * otherwise falls back to an inline SVG glyph so the brand is always present.
  *
- * The PNG lives at `/Thalamus_logo.png`; we keep it under `public/` so
- * `next/image` can optimise it and the browser can show it as a favicon.
+ * The PNG lives at `/Thalamus_logo.png`; we keep it under `public/` as a
+ * legacy fallback so existing bookmarks still resolve, but the wordmark
+ * is BunonBrain everywhere.
  */
-export function BrandMark({ size = 28, className, framed = false, withWordmark = false, usePng = true }: Props) {
+export function BrandMark({
+  size = 28,
+  className,
+  framed = false,
+  withWordmark = false,
+  usePng = false,
+  reveal = false
+}: Props) {
+  const { t } = useT();
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       {framed ? (
@@ -30,12 +42,12 @@ export function BrandMark({ size = 28, className, framed = false, withWordmark =
           style={{ width: size, height: size }}
           aria-hidden
         >
-          <BrandGlyph size={Math.round(size * 0.6)} />
+          <BrandGlyph size={Math.round(size * 0.6)} reveal={reveal} />
         </span>
       ) : usePng ? (
         <Image
           src="/Thalamus_logo.png"
-          alt="Thalamus"
+          alt={t("app.name") as string}
           width={size}
           height={size}
           priority
@@ -43,17 +55,30 @@ export function BrandMark({ size = 28, className, framed = false, withWordmark =
           style={{ width: size, height: size }}
         />
       ) : (
-        <BrandGlyph size={size} />
+        <BrandGlyph size={size} reveal={reveal} />
       )}
       {withWordmark && (
-        <span className="text-body font-semibold tracking-tight text-fg-primary">THALAMUS</span>
+        <span className="text-body font-semibold tracking-tight text-fg-primary">{t("app.name")}</span>
       )}
     </span>
   );
 }
 
-/** Pure SVG fallback — used when PNG fails to load or when we want a crisp vector. */
-export function BrandGlyph({ size = 28, className }: { size?: number; className?: string }) {
+/**
+ * Inline SVG glyph. When `reveal` is true, the path strokes itself on once
+ * via a CSS draw-on animation (handled in globals.css via `.brand-glyph-path`).
+ * pathLength="1" normalises the stroke length so the animation works
+ * without measuring the actual length.
+ */
+export function BrandGlyph({
+  size = 28,
+  className,
+  reveal = false
+}: {
+  size?: number;
+  className?: string;
+  reveal?: boolean;
+}) {
   return (
     <svg
       viewBox="0 0 32 32"
@@ -76,6 +101,9 @@ export function BrandGlyph({ size = 28, className }: { size?: number; className?
         strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        pathLength="1"
+        className={reveal ? "brand-glyph-path" : undefined}
+        style={reveal ? undefined : { strokeDasharray: "none", strokeDashoffset: 0 }}
       />
       <circle cx="24" cy="9" r="2" fill="var(--btn-primary-fg)" />
     </svg>

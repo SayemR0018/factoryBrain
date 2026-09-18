@@ -1,165 +1,213 @@
-// Ask Thalamus service — answers free-text questions with streaming reveal.
+// Ask BunonBrain — answers free-text factory-floor questions with streaming reveal.
 // Streaming blocks: analyzed → finding → factors → evidence → recommendation → done.
 // Routes to the live slice API when a key is present, otherwise produces a deterministic
-// derivation against the seed.
+// derivation against the synthetic factory state.
 
 import { dataset } from "./dataset";
+import { factoryTools } from "./factory.tools";
 import type { AskAnswer, AskContextPack, StreamChunk, EvidenceRefPublic, RiskTier } from "./types";
 
+/** Lazily resolve the factory store. */
+function factoryState() {
+  const mod = require("@/store/factory.store") as typeof import("@/store/factory.store");
+  return mod.useFactoryStore.getState();
+}
+
 const SUGGESTIONS_EN = [
-  "Why did sales drop this month?",
-  "Which products will stock out next week?",
-  "Top repeat customers this quarter",
-  "Customers likely to churn",
-  "Generate a Facebook promo for slow movers"
+  "Which line is at risk of missing today's target and why?",
+  "What's the efficiency on Line 3 right now?",
+  "Which machines need maintenance this week?"
 ];
 
 const SUGGESTIONS_BN = [
-  "এই মাসে বিক্রি কমেছে কেন?",
-  "পরের সপ্তাহে কোন পণ্যগুলো স্টকআউট হবে?",
-  "এই কোয়ার্টারে শীর্ষ পুনরায় ক্রেতা",
-  "চার্ন হতে পারে এমন ক্রেতা",
-  "ধীরে চলমান পণ্যের জন্য ফেসবুক প্রমো"
+  "আজকের লক্ষ্য মিস করতে পারে এমন লাইন কোনটি এবং কেন?",
+  "এই মুহূর্তে লাইন ৩ এর দক্ষতা কত?",
+  "এই সপ্তাহে কোন মেশিনে রক্ষণাবেক্ষণ দরকার?"
 ];
 
 export const askService = {
   suggestions(): string[] {
     return [...SUGGESTIONS_EN, ...SUGGESTIONS_BN];
   },
-  buildContextPack(query: string): AskContextPack {
+  buildContextPack(query: string, agentId?: string | null): AskContextPack {
     const q = query.toLowerCase();
-    const isDhaka = /dhaka|ঢাকা/.test(q);
-    const isStock = /stock|stockout|স্টক|স্টকআউট/.test(q);
-    const isChurn = /churn|repeat|চার্ন|পুনরায়/.test(q);
-    const relevantInsights = dataset.insights.filter((i) => {
-      if (isDhaka) return i.id === "ins-1" || i.id === "ins-6";
-      if (isStock) return i.id === "ins-2" || i.id === "ins-6";
-      if (isChurn) return i.id === "ins-3" || i.id === "ins-5";
+    const wantRisk = /risk|miss|at.risk|ঝুঁকি|মিস/.test(q);
+    const wantEfficiency = /efficiency|target|দক্ষতা|লক্ষ্য/.test(q);
+    const wantMaintenance = /maintenance|machine|broken|fix|রক্ষণাবেক্ষণ|মেশিন/.test(q);
+
+    const insights = dataset.insights.filter((i) => {
+      if (wantRisk) return i.agentId === "line-throughput-agent" || i.agentId === "manager-agent";
+      if (wantEfficiency) return i.agentId === "line-throughput-agent";
+      if (wantMaintenance) return i.agentId === "maintenance-agent";
       return true;
     });
-    const relevantEntities = dataset.graph.nodes.filter((n) => n.kind === "risk");
+    const state = factoryState();
+    const nodes = [...state.lines, ...state.machines].map((n) => ({
+      id: n.id,
+      kind: "line" as const,
+      label: (n as any).name ?? (n as any).id,
+      labelBn: (n as any).name ?? (n as any).id,
+      status: n.status as any
+    }));
     return {
       query,
+      scope: agentId ? [agentId] : undefined,
       health: dataset.health,
-      relevantInsights,
-      relevantEntities
+      relevantInsights: insights,
+      relevantEntities: nodes
     };
   },
   // Returns a streaming generator. Each yielded chunk is one of the answer blocks.
   async *stream(pack: AskContextPack): AsyncGenerator<StreamChunk> {
     const q = pack.query.toLowerCase();
-    const isDhaka = /dhaka|ঢাকা/.test(q);
-    const isStock = /stock|stockout|স্টক|স্টকআউট/.test(q);
-    const isChurn = /churn|repeat|চার্ন|পুনরায়/.test(q);
+    const wantRisk = /risk|miss|at.risk|ঝুঁকি|মিস/.test(q);
+    const wantEfficiency = /efficiency|target|দক্ষতা|লক্ষ্য/.test(q);
+    const wantMaintenance = /maintenance|machine|broken|fix|রক্ষণাবেক্ষণ|মেশিন/.test(q);
 
-    if (isStock) {
-      const atRisk = dataset.inventory.filter((i) => i.atRisk);
+    if (wantMaintenance || pack.scope?.includes("maintenance-agent")) {
+      const machines = factoryTools.get_machine_health();
       yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
-        { domain: "inventory", count: dataset.inventory.length },
-        { domain: "orders", count: dataset.orders.filter((o) => o.daysAgo <= 30).length }
+        { domain: "inventory", count: factoryState().machines.length },
+        { domain: "policies", count: dataset.policies.length }
       ]}};
       await sleep(180);
       yield { type: "block", index: 1, payload: { kind: "finding",
-        en: `${atRisk.length} products are projected to hit stockout within 14 days at current daily demand. Two planted SKUs (Coral Apparel Pro, Harvest Grocery Max) are critical.`,
-        bn: `${atRisk.length}টি পণ্য বর্তমান দৈনিক চাহিদায় ১৪ দিনের মধ্যে স্টকআউট হবে। দুটি পণ্য সবচেয়ে গুরুতর।`
+        en: `${machines.length} machines show warning-band telemetry. Top priorities: ${machines.slice(0, 2).map((m) => `${m.machine.id} (${m.reason.toLowerCase()})`).join("; ")}.`,
+        bn: `${bn(machines.length)}টি মেশিন সতর্কতা ব্যান্ডের টেলিমেট্রি দেখাচ্ছে। শীর্ষ অগ্রাধিকার: ${machines.slice(0, 2).map((m) => `${m.machine.id} (${m.reason})`).join("; ")}।`
       }};
       await sleep(160);
-      const factors = [
-        { label: "Critical SKUs (<8d)", labelBn: "গুরুতর SKU (<৮ দিন)", magnitude: String(atRisk.filter((i) => i.daysUntilStockout < 8).length), magnitudeBn: bn(atRisk.filter((i) => i.daysUntilStockout < 8).length) },
-        { label: "At-risk SKUs", labelBn: "ঝুঁকিপূর্ণ SKU", magnitude: String(atRisk.length), magnitudeBn: bn(atRisk.length) }
-      ];
+      const factors = machines.slice(0, 4).map((m) => ({
+        label: `${m.machine.id} RUL`,
+        labelBn: `${m.machine.id} RUL`,
+        magnitude: `${m.rulEstimate}d`,
+        magnitudeBn: `${bn(m.rulEstimate)} দিন`
+      }));
       yield { type: "factor", index: 2, payload: factors };
-      await sleep(160);
+      await sleep(140);
       const evidence: EvidenceRefPublic[] = [
-        { domain: "inventory", count: atRisk.length, previewIds: atRisk.slice(0, 6).map((i) => i.productId) }
+        { domain: "inventory", count: machines.length, previewIds: machines.slice(0, 6).map((m) => m.machine.id) },
+        { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] }
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
       yield { type: "recommendation", index: 4, payload: {
-        title: "Restock critical SKUs now",
-        titleBn: "এখনই গুরুতর SKU রিস্টক করুন",
-        action: "Submit restock orders; approval above ৳25,000.",
-        actionBn: "রিস্টক অর্ডার জমা দিন; ২৫,০০০ টাকার উপরে অনুমোদন প্রয়োজন।",
+        title: "Open work orders for the at-risk machines",
+        titleBn: "ঝুঁকিপূর্ণ মেশিনগুলোর জন্য ওয়ার্ক অর্ডার খুলুন",
+        action: "Pause non-critical production on those units ~30 minutes; book the maintenance window.",
+        actionBn: "ঐ ইউনিটগুলোতে অ-জরুরি উৎপাদন ~৩০ মিনিটের জন্য বন্ধ করুন; রক্ষণাবেক্ষণ উইন্ডো বুক করুন।",
         riskTier: "medium" as RiskTier
-      }};
-      yield { type: "done", index: 5, payload: { confidence: 0.88 } };
-      return;
-    }
-
-    if (isChurn) {
-      const customers = dataset.customers.filter((c) => c.churnRisk >= 0.7).slice(0, 50);
-      yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
-        { domain: "orders", count: dataset.orders.filter((o) => o.daysAgo <= 60).length },
-        { domain: "customers", count: dataset.customers.length }
-      ]}};
-      await sleep(160);
-      yield { type: "block", index: 1, payload: { kind: "finding",
-        en: `Repeat-purchase rate dropped by ${(dataset.health.churnRisePct * 100).toFixed(1)}% last 30 days vs the previous 30. ${customers.length} customers are at high churn risk.`,
-        bn: `গত ৩০ দিনে পুনরায় কেনার হার ${(dataset.health.churnRisePct * 100).toFixed(1)}% কমেছে। ${bn(customers.length)} জন ক্রেতা উচ্চ চার্ন ঝুঁকিতে।`
-      }};
-      await sleep(160);
-      const factors = [
-        { label: "Δ repeat rate", labelBn: "পুনরায় কেনার হারের পরিবর্তন", magnitude: `${(dataset.health.churnRisePct * 100).toFixed(1)}%`, magnitudeBn: `${(dataset.health.churnRisePct * 100).toFixed(1)}%` },
-        { label: "At-risk customers", labelBn: "ঝুঁকিপূর্ণ ক্রেতা", magnitude: String(customers.length), magnitudeBn: bn(customers.length) }
-      ];
-      yield { type: "factor", index: 2, payload: factors };
-      await sleep(140);
-      const evidence: EvidenceRefPublic[] = [
-        { domain: "customers", count: customers.length, filter: { churnRisk: ">=0.7" } }
-      ];
-      yield { type: "evidence", index: 3, payload: evidence };
-      await sleep(140);
-      yield { type: "recommendation", index: 4, payload: {
-        title: "Send win-back message to top 50 at-risk customers",
-        titleBn: "শীর্ষ ৫০ ঝুঁকিপূর্ণ ক্রেতাকে উইন-ব্যাক বার্তা পাঠান",
-        action: "Draft in Bangla + English; queue for review.",
-        actionBn: "বাংলা + ইংরেজিতে খসড়া; পর্যালোচনার জন্য সারিবদ্ধ।",
-        riskTier: "medium" as RiskTier
-      }};
-      yield { type: "done", index: 5, payload: { confidence: 0.74 } };
-      return;
-    }
-
-    // Default → Dhaka dip (the headline answer for the demo)
-    {
-      const dhaka = dataset.byDay.slice(-30).reduce((a, b) => a + (b.byRegion.Dhaka?.revenueBdt ?? 0), 0);
-      const prev = dataset.byDay.slice(-60, -30).reduce((a, b) => a + (b.byRegion.Dhaka?.revenueBdt ?? 0), 0);
-      const pct = prev > 0 ? (dhaka - prev) / prev : 0;
-      yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
-        { domain: "orders", count: dataset.orders.filter((o) => o.daysAgo <= 30).length, filter: { window: "30d" } },
-        { domain: "orders", count: dataset.orders.filter((o) => o.daysAgo > 30 && o.daysAgo <= 60).length, filter: { window: "previous 30d" } },
-        { domain: "customers", count: dataset.customers.filter((c) => c.region === "Dhaka").length, filter: { region: "Dhaka" } }
-      ]}};
-      await sleep(180);
-      yield { type: "block", index: 1, payload: { kind: "finding",
-        en: `Dhaka revenue fell ${(pct * 100).toFixed(1)}% over the last 30 days while every other region held flat. Two product categories and three weekdays concentrate the loss. Delivery complaints in Dhaka rose 38% in the same window.`,
-        bn: `গত ৩০ দিনে ঢাকার আয় ${(pct * 100).toFixed(1)}% কমেছে; অন্যান্য অঞ্চল সমান ছিল। হ্রাস দুটি ক্যাটাগরি ও তিনটি কর্মদিবসে কেন্দ্রীভূত। একই সময়ে ঢাকায় ডেলিভারি অভিযোগ ৩৮% বেড়েছে।`
-      }};
-      await sleep(160);
-      const factors = [
-        { label: "Dhaka revenue Δ", labelBn: "ঢাকা আয়ের পরিবর্তন", magnitude: `${(pct * 100).toFixed(1)}%`, magnitudeBn: `${(pct * 100).toFixed(1)}%` },
-        { label: "Other regions Δ", labelBn: "অন্যান্য অঞ্চলের পরিবর্তন", magnitude: "+0.4%", magnitudeBn: "+০.৪%" },
-        { label: "Dhaka delivery complaints (7d)", labelBn: "ঢাকা ডেলিভারি অভিযোগ (৭ দিন)", magnitude: "+38%", magnitudeBn: "+৩৮%" }
-      ];
-      yield { type: "factor", index: 2, payload: factors };
-      await sleep(140);
-      const evidence: EvidenceRefPublic[] = [
-        { domain: "orders", count: dataset.orders.filter((o) => o.region === "Dhaka" && o.daysAgo <= 30).length, filter: { region: "Dhaka", window: "30d" } },
-        { domain: "conversations", count: 3, filter: { theme: "delivery" } }
-      ];
-      yield { type: "evidence", index: 3, payload: evidence };
-      await sleep(140);
-      yield { type: "recommendation", index: 4, payload: {
-        title: "Investigate Dhaka delivery SLA breaches",
-        titleBn: "ঢাকা ডেলিভারি SLA লঙ্ঘন তদন্ত",
-        action: "Open an investigation; do not change pricing yet.",
-        actionBn: "তদন্ত শুরু করুন; এখনই দাম পরিবর্তন করবেন না।",
-        riskTier: "low" as RiskTier
       }};
       yield { type: "done", index: 5, payload: { confidence: 0.82 } };
+      return;
+    }
+
+    if (wantEfficiency || pack.scope?.includes("line-throughput-agent")) {
+      const lines = factoryTools.get_line_status();
+      const focus = lines.find((l) => /line-?3/.test(pack.query.toLowerCase())) ?? lines[0];
+      yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
+        { domain: "orders", count: dataset.orders.length },
+        { domain: "inventory", count: factoryState().lines.length }
+      ]}};
+      await sleep(180);
+      yield { type: "block", index: 1, payload: { kind: "finding",
+        en: `${focus.line.name} is running at ${Math.round(focus.line.efficiency * 100)}% line efficiency against a ${Math.round(focus.line.targetEfficiency * 100)}% target. Bottleneck: ${focus.bottleneck}.`,
+        bn: `${focus.line.name} ${Math.round(focus.line.efficiency * 100)}% দক্ষতায় চলছে, লক্ষ্য ${Math.round(focus.line.targetEfficiency * 100)}% এর বিপরীতে। বটলনেক: ${focus.bottleneck}।`
+      }};
+      await sleep(160);
+      const factors = [
+        { label: "Efficiency", labelBn: "দক্ষতা", magnitude: `${Math.round(focus.line.efficiency * 100)}%`, magnitudeBn: `${bn(Math.round(focus.line.efficiency * 100))}%` },
+        { label: "Target", labelBn: "লক্ষ্য", magnitude: `${Math.round(focus.line.targetEfficiency * 100)}%`, magnitudeBn: `${bn(Math.round(focus.line.targetEfficiency * 100))}%` },
+        { label: "Status", labelBn: "অবস্থা", magnitude: focus.line.status, magnitudeBn: focus.line.status }
+      ];
+      yield { type: "factor", index: 2, payload: factors };
+      await sleep(140);
+      const evidence: EvidenceRefPublic[] = [
+        { domain: "orders", count: focus.ordersAtRisk, filter: { lineId: focus.line.id } },
+        { domain: "inventory", count: 1, filter: { machineScope: focus.line.id } }
+      ];
+      yield { type: "evidence", index: 3, payload: evidence };
+      await sleep(140);
+      yield { type: "recommendation", index: 4, payload: {
+        title: "Re-balance operators towards the bottleneck operation",
+        titleBn: "বটলনেক অপারেশনের দিকে অপারেটর পুনর্ভারসাম্য করুন",
+        action: "Move 1–2 helpers from Finishing; reassess at next shift handover.",
+        actionBn: "ফিনিশিং থেকে ১–২ জন সহায়ক সরান; পরবর্তী শিফট হ্যান্ডওভারে পুনর্মূল্যায়ন।",
+        riskTier: "low" as RiskTier
+      }};
+      yield { type: "done", index: 5, payload: { confidence: 0.85 } };
+      return;
+    }
+
+    if (wantRisk || pack.scope?.includes("manager-agent")) {
+      const lines = factoryTools.get_line_status();
+      const atRisk = lines.filter((l) => l.line.efficiency + 0.05 < l.line.targetEfficiency || l.line.status !== "healthy");
+      yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
+        { domain: "orders", count: factoryState().orders.length },
+        { domain: "inventory", count: factoryState().lines.length }
+      ]}};
+      await sleep(180);
+      yield { type: "block", index: 1, payload: { kind: "finding",
+        en: `${atRisk.length} of ${lines.length} lines are below target. The first concern is ${atRisk[0]?.line.name ?? "none"} — ${atRisk[0]?.bottleneck ?? "all on target"}. ${focusSummary(atRisk)}.`,
+        bn: `${lines.length} লাইনের মধ্যে ${bn(atRisk.length)}টি লক্ষ্যের নিচে। প্রথম উদ্বেগ হলো ${atRisk[0]?.line.name ?? "কোনোটি নয়"} — ${atRisk[0]?.bottleneck ?? "সব লক্ষ্যে"}।`
+      }};
+      await sleep(160);
+      const factors = atRisk.slice(0, 4).map((l) => ({
+        label: `${l.line.name} gap`,
+        labelBn: `${l.line.name} ব্যবধান`,
+        magnitude: `${Math.round((l.line.targetEfficiency - l.line.efficiency) * 100)}pp`,
+        magnitudeBn: `${bn(Math.round((l.line.targetEfficiency - l.line.efficiency) * 100))} পয়েন্ট`
+      }));
+      yield { type: "factor", index: 2, payload: factors.length ? factors : [{ label: "No lines at risk", labelBn: "কোনো লাইন ঝুঁকিতে নেই", magnitude: "—", magnitudeBn: "—" }] };
+      await sleep(140);
+      const evidence: EvidenceRefPublic[] = [
+        { domain: "orders", count: atRisk.reduce((a, l) => a + l.ordersAtRisk, 0), previewIds: atRisk.slice(0, 4).map((l) => l.line.id) }
+      ];
+      yield { type: "evidence", index: 3, payload: evidence };
+      await sleep(140);
+      yield { type: "recommendation", index: 4, payload: {
+        title: "Re-balance the at-risk line; alert buyer if needed",
+        titleBn: "ঝুঁকিপূর্ণ লাইন পুনর্ভারসাম্য করুন; প্রয়োজনে ক্রেতাকে সতর্ক করুন",
+        action: "Open an internal re-balance and proactively message the affected buyer about possible delay.",
+        actionBn: "অভ্যন্তরীণ পুনর্ভারসাম্য খুলুন এবং সম্ভাব্য বিলম্ব সম্পর্কে প্রভাবিত ক্রেতাকে সক্রিয়ভাবে জানান।",
+        riskTier: "medium" as RiskTier
+      }};
+      yield { type: "done", index: 5, payload: { confidence: 0.79 } };
+      return;
+    }
+
+    // Default → orchestrator summary
+    {
+      const lines = factoryTools.get_line_status();
+      const machines = factoryTools.get_machine_health();
+      yield { type: "block", index: 0, payload: { kind: "analyzed", items: [
+        { domain: "orders", count: factoryState().orders.length },
+        { domain: "inventory", count: factoryState().lines.length }
+      ]}};
+      await sleep(180);
+      yield { type: "block", index: 1, payload: { kind: "finding",
+        en: `Quick read: ${lines.filter((l) => l.line.status !== "healthy").length} line(s) need attention, and ${machines.length} machine(s) are trending toward failure. Ask about either and I'll route to the right agent.`,
+        bn: `সংক্ষিপ্ত পড়া: ${bn(lines.filter((l) => l.line.status !== "healthy").length)}টি লাইনে মনোযোগ দরকার, এবং ${bn(machines.length)}টি মেশিন ব্যর্থতার দিকে এগোচ্ছে। যেকোনো একটি সম্পর্কে জিজ্ঞাসা করুন, আমি সঠিক এজেন্টে রাউট করব।`
+      }};
+      await sleep(160);
+      const factors: { label: string; labelBn: string; magnitude: string; magnitudeBn: string }[] = [];
+      yield { type: "factor", index: 2, payload: factors };
+      yield { type: "evidence", index: 3, payload: [] as EvidenceRefPublic[] };
+      yield { type: "recommendation", index: 4, payload: {
+        title: "Ask a specific question next",
+        titleBn: "পরবর্তীতে একটি নির্দিষ্ট প্রশ্ন জিজ্ঞাসা করুন",
+        action: "Try the three sample questions in the suggestions below.",
+        actionBn: "নিচের পরামর্শগুলো থেকে তিনটি নমুনা প্রশ্ন ব্যবহার করুন।",
+        riskTier: "low" as RiskTier
+      }};
+      yield { type: "done", index: 5, payload: { confidence: 0.6 } };
     }
   }
 };
+
+function focusSummary(atRisk: ReturnType<typeof factoryTools.get_line_status>): string {
+  if (!atRisk.length) return "All lines are on target";
+  return atRisk.map((l) => `${l.line.name} at ${Math.round(l.line.efficiency * 100)}%`).join(", ");
+}
 
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));

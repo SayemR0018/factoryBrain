@@ -1,4 +1,4 @@
-// Live Ask Thalamus endpoint.
+// Live Ask Factory Brain endpoint.
 // When LLM_PROVIDER + LLM_API_KEY are set, the route forwards the question +
 // a context pack to the model and adapts the response to the streaming shape
 // the UI expects. Otherwise the demo mock is used.
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   const query = parsed.data.query;
   const agentId = parsed.data.agentId;
-  const pack = askService.buildContextPack(query);
+  const pack = askService.buildContextPack(query, agentId);
   // When an agent is pre-selected, seed the demo stream with that agent's
   // most recent insight so the answer is visibly tailored.
   if (agentId) {
@@ -110,7 +110,8 @@ async function callModel(pack: { query: string; health: unknown; relevantInsight
 
 function buildPrompt(pack: { query: string; health: unknown; relevantInsights: any[] }) {
   return [
-    "You are THALAMUS, a business-intelligence assistant for a Bangladesh retail SME.",
+    "You are BunonBrain, the factory-floor operations assistant for a Bangladeshi RMG factory.",
+    "Three specialist agents back you: line-throughput-agent (line efficiency + bottlenecks), maintenance-agent (machine telemetry + failure prediction), manager-agent (routes questions, drafts the morning brief).",
     "Answer the user's question using the context pack below.",
     "Return ONLY JSON matching this shape:",
     JSON.stringify(

@@ -14,7 +14,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
           <div className="size-7 rounded bg-accent/15 border border-accent/30 flex items-center justify-center">
             <div className="size-2.5 rounded-full bg-accent" />
           </div>
-          <span className="text-body font-semibold tracking-tight">THALAMUS</span>
+          <span className="text-body font-semibold tracking-tight">Factory Brain</span>
         </Link>
         <LanguageToggle />
       </header>

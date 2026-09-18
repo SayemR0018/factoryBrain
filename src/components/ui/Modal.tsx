@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 type Props = {
   open: boolean;
@@ -18,6 +18,7 @@ type Props = {
 /** Minimal accessible modal — focus trap + ESC + click-outside. */
 export function Modal({ open, onClose, title, children, footer, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
@@ -34,25 +35,25 @@ export function Modal({ open, onClose, title, children, footer, className }: Pro
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
           className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm flex items-center justify-center p-4"
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             role="dialog"
             aria-modal="true"
             tabIndex={-1}
             ref={ref}
             onClick={(e) => e.stopPropagation()}
             className={cn(
-              "glass w-full max-w-lg shadow-glass outline-none",
+              "glass-strong w-full max-w-lg outline-none",
               className
             )}
           >
@@ -63,7 +64,7 @@ export function Modal({ open, onClose, title, children, footer, className }: Pro
                   type="button"
                   onClick={onClose}
                   aria-label="Close"
-                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary"
+                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary transition-colors"
                 >
                   <X size={14} />
                 </button>

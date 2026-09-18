@@ -11,6 +11,7 @@ import { useBusinessStore } from "@/store/business.store";
 import { Panel } from "@/components/ui/Panel";
 import { InsightCard } from "@/components/insights/InsightCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { AgentAvatar, AGENT_PALETTE, type AgentGlyph } from "@/components/agents/AgentAvatar";
 import { cn } from "@/lib/cn";
 import type { Stage, RiskTier } from "@/services/types";
@@ -34,13 +35,13 @@ export default function InsightsPage() {
 
   // Pre-filter from search query.
   useEffect(() => {
-    if (filterParam === "revenue") {
+    if (filterParam === "throughput") {
       setRiskFilter(null);
-      setAgentFilter("sales-analyst");
-    } else if (filterParam === "customers") {
-      setAgentFilter("customer-success");
-    } else if (filterParam === "stockout") {
-      setAgentFilter("inventory-agent");
+      setAgentFilter("line-throughput-agent");
+    } else if (filterParam === "machines") {
+      setAgentFilter("maintenance-agent");
+    } else if (filterParam === "brief") {
+      setAgentFilter("manager-agent");
     }
   }, [filterParam]);
 
@@ -139,7 +140,11 @@ export default function InsightsPage() {
                 }
               >
                 {items.length === 0 ? (
-                  <p className="text-caption text-fg-tertiary">{t("insights.empty")}</p>
+                  <div className="space-y-2.5" aria-busy>
+                    <Skeleton className="h-4 w-[60%]" />
+                    <Skeleton className="h-3 w-[80%]" />
+                    <Skeleton className="h-3 w-[68%]" />
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {items.map((i) => (

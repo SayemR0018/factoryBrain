@@ -37,9 +37,9 @@ export default function LandingPage() {
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="text-[40px] md:text-[64px] leading-[44px] md:leading-[68px] font-semibold tracking-tight"
         >
-          Thalamus understands your business,
+          Factory Brain understands your floor,
           <br />
-          <span className="text-fg-secondary">then assembles the AI that runs it.</span>
+          <span className="text-fg-secondary">then assembles the agents that run it.</span>
         </motion.h1>
 
         <motion.p
@@ -48,10 +48,10 @@ export default function LandingPage() {
           transition={{ delay: 0.15, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="mt-8 max-w-2xl text-body text-fg-secondary"
         >
-          A business-intelligence operating layer for Bangladesh retail SMEs. Connect your data,
-          watch the brain form, then ask the workforce — Sales, Marketing, Inventory, Customer
-          Success, Finance, Policy, Automation — in Bangla or English. Every answer carries
-          evidence. Every action requires your sign-off when the risk warrants it.
+          A factory-floor operations layer for Bangladeshi RMG factories. Connect your sensor feeds,
+          watch the brain form, then ask the floor — Line Throughput, Maintenance & Uptime,
+          Manager Orchestrator — in Bangla or English. Every answer carries evidence.
+          Every action requires your sign-off when the risk warrants it.
         </motion.p>
 
         <motion.div

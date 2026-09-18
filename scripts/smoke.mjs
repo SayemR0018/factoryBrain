@@ -62,13 +62,15 @@ async function main() {
     "src/services/activity.service.ts",
     "src/services/risk.service.ts",
     "src/services/ask.service.ts",
+    "src/services/factory.tools.ts",
+    "src/store/factory.store.ts",
     "src/i18n/en.ts",
     "src/i18n/bn.ts",
     "src/i18n/registry.ts",
     "config/model-routing.yaml",
     "config/risk-policy.yaml"
   ]) {
-    try { await read(f); assert(true, f); } catch (e) { assert(false, f); }
+    try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
 
   // 2. i18n tables share the same key tree
@@ -78,16 +80,12 @@ async function main() {
   assert(keyCount(en) > 50, "i18n: en has many keys");
   assert(keyCount(bn) > 50, "i18n: bn has many keys");
 
-  // 3. Model routing lists all seven agents
+  // 3. Model routing lists the three BunonBrain agents
   const routing = await read("config/model-routing.yaml");
   for (const id of [
-    "sales-analyst",
-    "marketing-agent",
-    "inventory-agent",
-    "customer-success",
-    "finance-agent",
-    "policy-docs-agent",
-    "automation-agent"
+    "line-throughput-agent",
+    "maintenance-agent",
+    "manager-agent"
   ]) {
     assert(routing.includes(id), "routing has " + id);
   }
@@ -109,11 +107,16 @@ async function main() {
   // 5. Dataset references in screens
   const askPage = await read("src/app/app/ask/page.tsx");
   assert(askPage.includes("/api/ask"), "ask page wires /api/ask");
-  assert(askPage.includes("execute") === false || askPage.toLowerCase().includes("execute"), "ask page has execute action");
   const brainPage = await read("src/app/app/brain/page.tsx");
   assert(brainPage.includes("ReactFlow") || brainPage.includes("reactflow"), "brain uses React Flow");
-  const arch = await read("src/app/app/architecture/page.tsx");
-  assert(arch.includes("Continuous Context"), "architecture page mentions all seven layers");
+  const arch = await read("src/components/dev/ArchitectureView.tsx");
+  assert(arch.includes("Continuous Context"), "architecture view mentions all seven layers");
+
+  // 6. Brand naming wired through i18n + layout metadata.
+  assert(en.includes('name: "BunonBrain"'), "en: app.name is BunonBrain");
+  assert(bn.includes('name: "বুননব্রেইন"'), "bn: app.name is বুননব্রেইন");
+  const layout = await read("src/app/layout.tsx");
+  assert(layout.includes("BunonBrain"), "layout metadata mentions BunonBrain");
 
   console.log("\nAll smoke checks passed.");
 }

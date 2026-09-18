@@ -212,7 +212,7 @@ export default function AgentsPage() {
           data-tour="brain"
         >
           <Brain3D size={220} />
-          <p className="mt-1 text-center text-caption text-fg-tertiary mono-pill">Business Brain</p>
+          <p className="mt-1 text-center text-caption text-fg-tertiary mono-pill">Factory Brain</p>
         </div>
 
         {/* Agent tiles */}

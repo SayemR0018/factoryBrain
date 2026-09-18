@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "THALAMUS — Business Brain for Bangladesh SMEs",
-  description: "Understands your business, then assembles the AI that runs it.",
-  applicationName: "THALAMUS",
+  title: "BunonBrain — Central Intelligence for the Smart Factory",
+  description: "The Central Intelligence for the Smart Factory.",
+  applicationName: "BunonBrain",
   icons: {
     icon: [
       { url: "/Thalamus_logo.png", type: "image/png", sizes: "any" }
@@ -14,12 +14,15 @@ export const metadata: Metadata = {
 };
 
 /* Inline script that applies the saved theme before React hydrates so
-   there is no flash. The same `thalamus:*` localStorage keys are used
-   for app state, so we only need to read the dedicated theme key. */
+   there is no flash. Reads the new `bunonbrain:theme` key; the old
+   `factoryBrain:theme` and `thalamus:theme` keys are read as a fallback
+   so users coming from older builds don't see a flash. */
 const themeBootstrap = `
 (function() {
   try {
-    var stored = window.localStorage.getItem('thalamus:theme');
+    var stored = window.localStorage.getItem('bunonbrain:theme')
+      || window.localStorage.getItem('factoryBrain:theme')
+      || window.localStorage.getItem('thalamus:theme');
     var sys = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     var theme = stored === 'light' || stored === 'dark' ? stored : (stored === 'system' ? sys : 'dark');
     var root = document.documentElement;

@@ -80,7 +80,7 @@ function pickInsightFactors(agentId: string): { finding: string } {
 
 function buildPrompt(agent: { id: string; name: string; purpose: string }, seed: { finding: string }) {
   return [
-    "You are THALAMUS. Produce one short, actionable insight in JSON.",
+    "You are BunonBrain. Produce one short, actionable insight in JSON.",
     JSON.stringify({
       insightId: "string",
       title: "string (≤ 80 chars)",

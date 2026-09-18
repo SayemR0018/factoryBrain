@@ -18,37 +18,59 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Filter,
   X,
-  Package,
-  Users,
+  Factory,
+  Cog,
   Truck,
-  FileText,
-  Workflow,
-  Target,
+  FileCheck,
+  ShoppingBag,
   AlertTriangle,
   Search,
   Snowflake,
   SnowflakeIcon,
   Sparkles,
-  Maximize2
+  Maximize2,
+  Activity,
+  Crosshair,
+  ShieldCheck,
+  Scissors
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useT } from "@/lib/useT";
-import { brainService } from "@/services/brain.service";
+import { brainService, useBrainGraph } from "@/services/brain.service";
+import { startSyntheticSensorStream } from "@/store/factory.store";
 import type { BrainEntityPublic } from "@/services/types";
 import { Panel } from "@/components/ui/Panel";
 import { EvidenceBlock } from "@/components/evidence/EvidenceBlock";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
+import { useReducedMotion } from "@/lib/useReducedMotion";
 
 const KIND_META: Record<BrainEntityPublic["kind"], { color: string; icon: any }> = {
-  product: { color: "#7CE0C6", icon: Package },
-  customer: { color: "#6FA8E6", icon: Users },
+  // Legacy aliases — kept so the previous string keys still resolve in
+  // places that pass through them, but every visible node carries one of
+  // the new kinds below.
+  product: { color: "#7CE0C6", icon: ShoppingBag },
+  customer: { color: "#6FA8E6", icon: Truck },
   supplier: { color: "#E4B14A", icon: Truck },
-  policy: { color: "#A4ACBD", icon: FileText },
-  workflow: { color: "#5BB98B", icon: Workflow },
-  goal: { color: "#C498F0", icon: Target },
-  risk: { color: "#E26B6B", icon: AlertTriangle }
+  policy: { color: "#A4ACBD", icon: FileCheck },
+  workflow: { color: "#5BB98B", icon: Activity },
+  goal: { color: "#C498F0", icon: Crosshair },
+  risk: { color: "#E26B6B", icon: AlertTriangle },
+  // Factory kinds.
+  line: { color: "#7CD3F0", icon: Factory },
+  machine: { color: "#F0B97C", icon: Cog },
+  order: { color: "#7CE0C6", icon: ShoppingBag },
+  buyer: { color: "#6FA8E6", icon: Truck },
+  process: { color: "#5BB98B", icon: Scissors },
+  target: { color: "#C498F0", icon: Crosshair },
+  compliance: { color: "#9BA4B5", icon: ShieldCheck }
+};
+
+const STATUS_BORDER: Record<"healthy" | "at_risk" | "down", string> = {
+  healthy: "rgba(124, 224, 184, 0.6)",
+  at_risk: "rgba(240, 185, 80, 0.9)",
+  down: "rgba(226, 107, 107, 0.95)"
 };
 
 export default function BrainPage() {
@@ -70,9 +92,16 @@ function BrainInner() {
   const [frozen, setFrozen] = useState(false);
   const rf = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
 
-  // Effective graph — always pull the full graph then filter the layout pass.
-  const graph = useMemo(() => brainService.getGraph({ kinds: Array.from(filters) }), [filters]);
+  // Start the synthetic sensor stream when the brain page mounts.
+  useEffect(() => {
+    const stop = startSyntheticSensorStream();
+    return stop;
+  }, []);
+
+  // Effective graph — reactive against factory.store ticks.
+  const graph = useBrainGraph({ kinds: Array.from(filters) });
 
   // Filtered by search query (overlay on top of the kind filters).
   const filteredGraph = useMemo(() => {
@@ -170,72 +199,104 @@ function BrainInner() {
             />
           </div>
           <Tooltip content={frozen ? "Resume layout" : "Freeze layout"}>
-            <button
+            <motion.button
               type="button"
               onClick={() => setFrozen((f) => !f)}
               aria-pressed={frozen}
+              whileHover={reduceMotion ? undefined : { y: -1 }}
+              whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 420, damping: 30 }}
               className={cn(
                 "size-9 rounded-md border inline-flex items-center justify-center transition-colors",
                 frozen
-                  ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-accent"
+                  ? "bg-[var(--accent-soft)] border-[var(--accent-border)] text-accent shadow-pop"
                   : "bg-surface-2 border-border-subtle text-fg-secondary hover:text-fg-primary hover:border-border-strong"
               )}
               aria-label={frozen ? "Resume layout" : "Freeze layout"}
             >
               {frozen ? <Snowflake size={14} /> : <SnowflakeIcon size={14} />}
-            </button>
+            </motion.button>
           </Tooltip>
           <Tooltip content={t("brain.fit") as string}>
-            <button
+            <motion.button
               type="button"
               onClick={fitAll}
+              whileHover={reduceMotion ? undefined : { y: -1 }}
+              whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 420, damping: 30 }}
               className="size-9 rounded-md border border-border-subtle bg-surface-2 text-fg-secondary hover:text-fg-primary hover:border-border-strong inline-flex items-center justify-center transition-colors"
               aria-label={t("brain.fit") as string}
             >
               <Maximize2 size={14} />
-            </button>
+            </motion.button>
           </Tooltip>
         </div>
       </div>
 
       <div className="flex-1 flex min-h-0">
         {/* Filter rail */}
-        <div className="w-56 shrink-0 border-r border-border-subtle p-4 overflow-y-auto hidden md:block">
+        <div className="w-56 shrink-0 border-r border-border-subtle p-4 overflow-y-auto hidden md:block glass-soft" style={{ borderRadius: 0 }}>
           <div className="flex items-center gap-2 text-caption text-fg-tertiary mb-3">
             <Filter size={12} /> {t("brain.filter")}
           </div>
           <div className="space-y-1.5">
-            {(Object.keys(KIND_META) as BrainEntityPublic["kind"][]).map((k) => {
+            {([
+              "line",
+              "machine",
+              "order",
+              "buyer",
+              "supplier",
+              "process",
+              "target",
+              "compliance",
+              "risk"
+            ] as BrainEntityPublic["kind"][]).map((k) => {
               const meta = KIND_META[k];
               const Icon = meta.icon;
               const active = filters.has(k);
               const count = graph.nodes.filter((n) => n.kind === k).length;
               return (
-                <button
+                <motion.button
                   key={k}
                   type="button"
                   onClick={() => toggleKind(k)}
                   aria-pressed={active}
+                  whileHover={reduceMotion ? undefined : { y: -1 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2 h-8 rounded-md text-caption transition-colors",
-                    active ? "bg-surface-2 text-fg-primary" : "text-fg-secondary hover:text-fg-primary hover:bg-surface"
+                    "w-full flex items-center gap-2 px-2 h-8 rounded-md text-caption",
+                    "transition-[background-color,color,border-color] duration-150",
+                    active
+                      ? "bg-surface-2 text-fg-primary border border-border-subtle shadow-pop"
+                      : "text-fg-secondary hover:text-fg-primary hover:bg-surface border border-transparent"
                   )}
                 >
                   <span
-                    className="size-2 rounded-full"
+                    className="size-2 rounded-full transition-colors"
                     style={{ backgroundColor: active ? meta.color : "rgba(255,255,255,0.2)" }}
                   />
-                  <Icon size={13} />
+                  <Icon size={13} style={active ? { color: meta.color } : undefined} />
                   <span className="flex-1 text-left">{t(`brain.entity.${k}` as any)}</span>
                   <span className="text-[10px] text-fg-tertiary mono-pill">{count}</span>
-                </button>
+                </motion.button>
               );
             })}
           </div>
           <div className="mt-6 text-caption text-fg-tertiary">
             <p>{t("brain.legend")}</p>
             <div className="mt-2 space-y-1.5">
-              {(Object.keys(KIND_META) as BrainEntityPublic["kind"][]).map((k) => {
+              {([
+                "line",
+                "machine",
+                "order",
+                "buyer",
+                "supplier",
+                "process",
+                "target",
+                "compliance",
+                "risk"
+              ] as BrainEntityPublic["kind"][]).map((k) => {
                 const meta = KIND_META[k];
                 return (
                   <div key={k} className="flex items-center gap-2 text-caption text-fg-secondary">
@@ -244,10 +305,24 @@ function BrainInner() {
                   </div>
                 );
               })}
+              <div className="pt-2 mt-2 border-t border-border-subtle space-y-1">
+                <div className="flex items-center gap-2 text-caption text-fg-tertiary">
+                  <span className="size-2 rounded-full" style={{ background: STATUS_BORDER.healthy }} />
+                  {t("brain.status.healthy" as any)}
+                </div>
+                <div className="flex items-center gap-2 text-caption text-fg-tertiary">
+                  <span className="size-2 rounded-full" style={{ background: STATUS_BORDER.at_risk }} />
+                  {t("brain.status.at_risk" as any)}
+                </div>
+                <div className="flex items-center gap-2 text-caption text-fg-tertiary">
+                  <span className="size-2 rounded-full" style={{ background: STATUS_BORDER.down }} />
+                  {t("brain.status.down" as any)}
+                </div>
+              </div>
             </div>
             <p className="mt-4 text-[11px] text-fg-tertiary">
               <Sparkles size={10} className="inline mr-1" />
-              Node size reflects importance. Hover to dim unrelated nodes.
+              Node size reflects importance. Border colour reflects status: green = healthy, amber = at-risk, red = down.
             </p>
           </div>
         </div>
@@ -321,11 +396,12 @@ function BrainInner() {
               return (
                 <motion.div
                   key="hover-card"
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.14 }}
-                  className="absolute top-4 right-4 z-10 max-w-xs glass shadow-pop rounded-md p-3"
+                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.97 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute top-4 right-4 z-10 max-w-xs glass-strong shadow-glass rounded-md p-3"
+                  style={{ borderTop: `1px solid ${meta.color}` }}
                 >
                   <div className="flex items-center gap-2">
                     <span
@@ -354,9 +430,14 @@ function BrainInner() {
           </AnimatePresence>
 
           {frozen && (
-            <div className="absolute top-4 left-4 z-10 px-2 h-7 rounded-md border border-border-subtle bg-surface-2 text-fg-secondary text-caption inline-flex items-center gap-1.5">
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute top-4 left-4 z-10 px-2 h-7 rounded-md border border-border-subtle glass-soft text-fg-secondary text-caption inline-flex items-center gap-1.5 shadow-pop"
+            >
               <Snowflake size={12} className="text-accent" /> Layout frozen
-            </div>
+            </motion.div>
           )}
         </div>
 
@@ -365,11 +446,11 @@ function BrainInner() {
           {selected && (
             <motion.aside
               key="detail"
-              initial={{ x: 360, opacity: 0 }}
+              initial={reduceMotion ? { opacity: 0 } : { x: 360, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 360, opacity: 0 }}
-              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              className="w-96 shrink-0 border-l border-border-subtle bg-surface overflow-y-auto"
+              exit={reduceMotion ? { opacity: 0 } : { x: 360, opacity: 0 }}
+              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+              className="w-96 shrink-0 border-l border-border-subtle glass-strong overflow-y-auto"
             >
               <div className="p-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -392,14 +473,17 @@ function BrainInner() {
                     </ul>
                   )}
                 </div>
-                <button
+                <motion.button
                   type="button"
                   onClick={() => setSelectedId(null)}
-                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary"
+                  whileHover={reduceMotion ? undefined : { y: -1 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                  className="size-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-fg-tertiary hover:text-fg-primary transition-colors"
                   aria-label="Close detail"
                 >
                   <X size={14} />
-                </button>
+                </motion.button>
               </div>
 
               {neighbors.length > 0 && (
@@ -407,17 +491,20 @@ function BrainInner() {
                   <p className="mono-pill text-fg-tertiary mb-2">{t("brain.neighbors")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {neighbors.map((n) => (
-                      <button
+                      <motion.button
                         key={n.id}
                         type="button"
                         onClick={() => {
                           setSelectedId(n.id);
                           rf.fitView({ nodes: [{ id: n.id }], duration: 500, padding: 0.4 });
                         }}
-                        className="h-7 px-2 rounded-md border border-border-subtle bg-surface-2 text-caption text-fg-secondary hover:text-fg-primary transition-colors"
+                        whileHover={reduceMotion ? undefined : { y: -1 }}
+                        whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                        className="h-7 px-2 rounded-md border border-border-subtle bg-surface-2 text-caption text-fg-secondary hover:text-fg-primary hover:border-border-strong transition-colors"
                       >
                         {locale === "bn" ? n.labelBn : n.label}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -440,13 +527,21 @@ function BrainInner() {
 
 function entityToDomain(kind: BrainEntityPublic["kind"]): any {
   switch (kind) {
+    case "line": return "orders";
+    case "machine": return "inventory";
+    case "order": return "orders";
+    case "buyer": return "customers";
+    case "supplier": return "suppliers";
+    case "process": return "orders";
+    case "target": return "orders";
+    case "compliance": return "policies";
+    case "risk": return "orders";
+    // Legacy aliases (so any leftover seed still maps).
     case "product": return "products";
     case "customer": return "customers";
-    case "supplier": return "suppliers";
     case "policy": return "policies";
     case "workflow": return "orders";
     case "goal": return "orders";
-    case "risk": return "orders";
   }
 }
 
@@ -454,6 +549,7 @@ type NodeData = {
   kind: BrainEntityPublic["kind"];
   label: string;
   weight: number;
+  status?: "healthy" | "at_risk" | "down";
   selected?: boolean;
   hovered?: boolean;
   dim?: boolean;
@@ -468,15 +564,22 @@ function EntityNode({ data }: NodeProps<NodeData>) {
   const Icon = meta.icon;
   // Map weight (0..1) into a size factor (1.0 → 1.5x, 0.5 → 1.0x, 0.0 → 0.75x)
   const factor = 0.75 + (data.weight ?? 0.5) * 0.75;
+  const statusBorder = data.status ? STATUS_BORDER[data.status] : undefined;
+  const pulse = data.status === "at_risk" || data.status === "down";
   return (
     <div
       className={cn(
         "rounded-md border bg-surface px-2.5 py-1.5 flex items-center gap-2 transition-all duration-200",
         data.selected ? "shadow-pop" : "",
+        pulse ? "animate-[brain-status-pulse_2.4s_ease-in-out_infinite]" : "",
         "brain-entity-node"
       )}
       style={{
-        borderColor: data.selected || data.hovered ? meta.color : "var(--border-subtle)",
+        borderColor: data.selected || data.hovered
+          ? meta.color
+          : statusBorder ?? "var(--border-subtle)",
+        borderWidth: statusBorder ? 1.5 : 1,
+        boxShadow: data.status === "down" ? `0 0 0 2px ${STATUS_BORDER.down}` : undefined,
         transform: `scale(${factor})`,
         transformOrigin: "center center"
       }}
@@ -498,9 +601,27 @@ function layoutGraph(nodes: BrainEntityPublic[], edges: any[]): { nodes: Node[];
   const kindBuckets: Record<string, BrainEntityPublic[]> = {};
   for (const n of nodes) (kindBuckets[n.kind] ??= []).push(n);
 
-  const order: BrainEntityPublic["kind"][] = ["risk", "goal", "workflow", "policy", "supplier", "customer", "product"];
+  const order: BrainEntityPublic["kind"][] = [
+    "risk",
+    "target",
+    "process",
+    "compliance",
+    "supplier",
+    "buyer",
+    "order",
+    "machine",
+    "line"
+  ];
   const radiusByKind: Record<string, number> = {
-    risk: 80, goal: 140, workflow: 200, policy: 260, supplier: 320, customer: 380, product: 440
+    risk: 80,
+    target: 140,
+    process: 200,
+    compliance: 260,
+    supplier: 320,
+    buyer: 380,
+    order: 440,
+    machine: 500,
+    line: 560
   };
 
   const rfNodes: Node[] = [];
@@ -508,14 +629,14 @@ function layoutGraph(nodes: BrainEntityPublic[], edges: any[]): { nodes: Node[];
   for (const kind of order) {
     const list = kindBuckets[kind] ?? [];
     if (!list.length) continue;
-    const r = radiusByKind[kind];
+    const r = radiusByKind[kind] ?? 320;
     list.forEach((n, i) => {
       const a = angle + (i / Math.max(1, list.length)) * Math.PI * 2;
       rfNodes.push({
         id: n.id,
         type: "entity",
         position: { x: 700 + Math.cos(a) * r, y: 460 + Math.sin(a) * r },
-        data: { kind: n.kind, label: n.label, weight: n.weight ?? 0.5 }
+        data: { kind: n.kind, label: n.label, weight: n.weight ?? 0.5, status: n.status }
       });
     });
     angle += Math.PI / 6;

@@ -10,7 +10,10 @@ const labels: Record<string, { label: string; labelBn: string }> = {
   facebook: { label: "Facebook", labelBn: "ফেসবুক" },
   instagram: { label: "Instagram", labelBn: "ইনস্টাগ্রাম" },
   csv: { label: "CSV / Excel", labelBn: "CSV / এক্সেল" },
-  documents: { label: "Documents", labelBn: "নথি" }
+  documents: { label: "Documents", labelBn: "নথি" },
+  "rfid-bundles": { label: "RFID bundle scans", labelBn: "RFID বান্ডেল স্ক্যান" },
+  "machine-telemetry": { label: "Machine telemetry", labelBn: "মেশিন টেলিমেট্রি" },
+  "energy-meter": { label: "Energy meter", labelBn: "এনার্জি মিটার" }
 };
 
 const objectTypeMap: Record<string, string[]> = {
@@ -20,8 +23,22 @@ const objectTypeMap: Record<string, string[]> = {
   facebook: ["orders", "customers"],
   instagram: ["orders", "customers"],
   csv: ["products", "orders", "customers", "inventory"],
-  documents: ["policies", "suppliers"]
+  documents: ["policies", "suppliers"],
+  "rfid-bundles": ["orders"],
+  "machine-telemetry": ["inventory"],
+  "energy-meter": ["inventory"]
 };
+
+/** Sensor sources get a "simulated" tag so the UI surfaces the calibration. */
+export const SENSOR_SOURCE_IDS = new Set([
+  "rfid-bundles",
+  "machine-telemetry",
+  "energy-meter"
+]);
+
+export function isSensorSource(id: string): boolean {
+  return SENSOR_SOURCE_IDS.has(id);
+}
 
 /** Per-source "what we'd pull" record count, used as a stable baseline. */
 const baselineRecordCount = (id: string): number => {
@@ -40,6 +57,12 @@ const baselineRecordCount = (id: string): number => {
       return 2400;
     case "documents":
       return dataset.policies.length * 2;
+    case "rfid-bundles":
+      return 12 * 60; // 12 lines × 60 bundle scans per simulated hour
+    case "machine-telemetry":
+      return 36 * 6; // 36 machines × 6 readings per simulated hour
+    case "energy-meter":
+      return 6 * 24; // 6 lines × 24 half-hour readings
     default:
       return 0;
   }

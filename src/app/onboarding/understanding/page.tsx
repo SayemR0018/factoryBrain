@@ -8,16 +8,20 @@ import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { useT } from "@/lib/useT";
 import { Button } from "@/components/ui/Button";
 import { dataset } from "@/services/dataset";
+import { useFactoryStore } from "@/store/factory.store";
 import { useBusinessStore } from "@/store/business.store";
 import { cn } from "@/lib/cn";
 
+// Seven derivation steps for the factory floor.
+// 1) lines from the synthetic factory store, 2) machines, 3) orders, 4) buyers,
+// 5) suppliers, 6) compliance docs, 7) knowledge-graph build.
 const steps = [
-  { key: "products", label: "steps.products", run: (s: any) => { s.productCount = dataset.products.length; } },
-  { key: "customers", label: "steps.customers", run: (s: any) => { s.customerCount = dataset.customers.length; } },
-  { key: "salesPatterns", label: "steps.salesPatterns", run: (s: any) => { s.patternCount = dataset.byDay.length; } },
-  { key: "inventory", label: "steps.inventory", run: (s: any) => { s.skuCount = dataset.products.length; } },
-  { key: "goals", label: "steps.goals", run: (s: any) => { s.goalCount = dataset.goals.length; } },
-  { key: "policies", label: "steps.policies", run: (s: any) => { s.policyCount = dataset.policies.length; } },
+  { key: "lines", label: "steps.lines", run: (s: any) => { s.lineCount = useFactoryStore.getState().lines.length; } },
+  { key: "machines", label: "steps.machines", run: (s: any) => { s.machineCount = useFactoryStore.getState().machines.length; } },
+  { key: "orders", label: "steps.orders", run: (s: any) => { s.orderCount = useFactoryStore.getState().orders.length; } },
+  { key: "buyers", label: "steps.buyers", run: (s: any) => { s.buyerCount = dataset.customers.length; } },
+  { key: "suppliers", label: "steps.suppliers", run: (s: any) => { s.supplierCount = dataset.suppliers.length; } },
+  { key: "compliance", label: "steps.compliance", run: (s: any) => { s.policyCount = dataset.policies.length; } },
   { key: "graph", label: "steps.graph", run: (s: any) => { s.nodeCount = dataset.graph.nodes.length; s.edgeCount = dataset.graph.edges.length; } }
 ] as const;
 
@@ -87,14 +91,9 @@ export default function UnderstandingPage() {
                   {t(`onboarding.understanding.${s.label}`)}
                 </span>
                 <AnimatePresence>
-                  {isDone && s.key === "products" && (
+                  {isDone && (s.key === "lines" || s.key === "machines" || s.key === "orders" || s.key === "buyers" || s.key === "suppliers" || s.key === "compliance") && (
                     <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mono-pill text-fg-tertiary">
-                      {snapshot.productCount}
-                    </motion.span>
-                  )}
-                  {isDone && s.key === "customers" && (
-                    <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mono-pill text-fg-tertiary">
-                      {snapshot.customerCount}
+                      {snapshot.lineCount ?? snapshot.machineCount ?? snapshot.orderCount ?? snapshot.buyerCount ?? snapshot.supplierCount ?? snapshot.policyCount}
                     </motion.span>
                   )}
                   {isDone && s.key === "graph" && (

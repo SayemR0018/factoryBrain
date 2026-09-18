@@ -1,4 +1,4 @@
-// Ask Thalamus history — a per-user list of questions with the rendered answer blocks.
+// Ask BunonBrain history — a per-user list of questions with the rendered answer blocks.
 // Persisted so reload preserves the conversation arc.
 
 "use client";
@@ -30,20 +30,20 @@ type AskState = {
 };
 
 export const useAskStore = create<AskState>((set, get) => ({
-  history: storage.get<AskRecord[]>("thalamus:askHistory", []),
+  history: storage.get<AskRecord[]>("bunonbrain:askHistory", []),
   push: (rec) => {
     const cur = get().history.filter((r) => r.id !== rec.id);
     const next = [rec, ...cur].slice(0, 30);
-    storage.set("thalamus:askHistory", next);
+    storage.set("bunonbrain:askHistory", next);
     set({ history: next });
   },
   remove: (id) => {
     const next = get().history.filter((r) => r.id !== id);
-    storage.set("thalamus:askHistory", next);
+    storage.set("bunonbrain:askHistory", next);
     set({ history: next });
   },
   clear: () => {
-    storage.set("thalamus:askHistory", []);
+    storage.set("bunonbrain:askHistory", []);
     set({ history: [] });
   }
 }));

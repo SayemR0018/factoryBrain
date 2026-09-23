@@ -5,6 +5,8 @@
 
 import type { FactoryLine, FactoryMachine } from "@/store/factory.store";
 import { dataset } from "@/services/dataset";
+import { getManualCorpus } from "@/data/manuals";
+import type { DocSourceT, ManualDocT } from "@/services/sensors.schemas";
 
 /** Lazily resolve factory store so server bundle never touches zustand directly. */
 function state() {
@@ -34,8 +36,21 @@ export type EnergyUsageTool = {
 
 export type ManualSearchTool = {
   query: string;
-  hits: Array<{ id: string; title: string; snippet: string }>;
+  hits: Array<{
+    id: string;
+    title: string;
+    /** English or Bangla excerpt (locale inferred from the query shape). */
+    snippet: string;
+    /** "manual" or "sensor_log". */
+    source: DocSourceT;
+    /** 0..1 ranking score, used by Ask/Manager agent for ordering. */
+    score: number;
+    /** Any tags that contributed to the ranking. */
+    matchedTags?: string[];
+  }>;
 };
+
+type SearchHit = ManualSearchTool["hits"][number];
 
 export const factoryTools = {
   get_line_status(lineId?: string): LineStatusTool[] {
@@ -86,17 +101,88 @@ export const factoryTools = {
     });
   },
 
-  search_manual(query: string): ManualSearchTool {
+  search_manual(query: string, opts?: { limit?: number; locale?: "en" | "bn" }): ManualSearchTool {
     const q = query.trim().toLowerCase();
+    const locale: "en" | "bn" = opts?.locale ?? "en";
+    const limit = opts?.limit ?? 5;
     if (!q) return { query, hits: [] };
-    const hits = dataset.policies
+
+    // Tokenise once. Bengali words don't have whitespace inside the seeded
+    // bodies, but we keep the regex split generic for forward-compat.
+    const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+
+    // Walk the canonical corpus + still consult legacy `dataset.policies` for
+    // backward compatibility. Manual hits dominate; policies surface only when
+    // they're truly relevant.
+    const manuals = getManualCorpus();
+    type ScoredManual = SearchHit & { _raw: ManualDocT };
+    const scored: ScoredManual[] = manuals.map((doc) => {
+      const titleEn = doc.titleEn.toLowerCase();
+      const titleBn = doc.titleBn.toLowerCase();
+      const bodyEn = doc.bodyEn.toLowerCase();
+      const bodyBn = doc.bodyBn.toLowerCase();
+
+      let score = 0;
+      const matched: string[] = [];
+
+      for (const t of tokens) {
+        if (!t) continue;
+        if (titleEn.includes(t) || titleBn.includes(t)) {
+          score += 3;
+        }
+        if (bodyEn.includes(t) || bodyBn.includes(t)) {
+          score += 1;
+          // Bangla-prefixed body hits get a small extra boost so the demo
+          // surfaces them consistently when the user wrote in Bangla.
+          if (bodyBn.includes(t)) score += 0.5;
+        }
+        if (doc.tags.some((tag) => tag === t || tag.includes(t))) {
+          score += 2;
+          matched.push(t);
+        }
+      }
+
+      // Pick the best locale's snippet for the hit. Falls back to English.
+      const useBn = locale === "bn" || titleBn.includes(q);
+      const snippet = (useBn ? doc.bodyBn : doc.bodyEn).slice(0, 160);
+
+      return {
+        id: doc.id,
+        title: useBn ? doc.titleBn : doc.titleEn,
+        snippet,
+        source: doc.source,
+        score: Math.round(score * 100) / 100,
+        matchedTags: matched.length ? matched : undefined,
+        _raw: doc
+      };
+    });
+
+    // Strip the internal `_raw` projection from manual hits before they
+    // touch the public surface.
+    const cleanManuals: SearchHit[] = scored.map(({ _raw, ...rest }) => {
+      void _raw;
+      return rest;
+    });
+
+    // Fallback: surface a couple of legacy policies so the tool never returns
+    // empty for queries that mention "policy" / "compliance".
+    const policyFallback: SearchHit[] = dataset.policies
+      .filter((p) => tokens.some((t) => p.title.toLowerCase().includes(t) || p.body.toLowerCase().includes(t)))
+      .slice(0, 2)
       .map((p) => ({
         id: p.id,
         title: p.title,
-        snippet: p.body.slice(0, 140)
-      }))
-      .filter((h) => h.title.toLowerCase().includes(q) || h.snippet.toLowerCase().includes(q))
-      .slice(0, 5);
-    return { query, hits };
+        snippet: p.body.slice(0, 140),
+        source: "manual" as DocSourceT,
+        score: 0.1,
+        matchedTags: undefined
+      }));
+
+    const merged = [...cleanManuals, ...policyFallback]
+      .filter((h) => h.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return { query, hits: merged };
   }
 };

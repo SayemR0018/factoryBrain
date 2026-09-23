@@ -65,7 +65,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const answer = await callModel(pack);
+    const answer = await callModel({
+      query: pack.query,
+      health: pack.health,
+      relevantInsights: pack.relevantInsights,
+      manualHits: (pack as any).manualHits
+    });
     return Response.json(answer);
   } catch (err) {
     // Live failed — fall back to the deterministic mock so the UI never breaks.
@@ -102,17 +107,24 @@ function mockStream(pack: { query: string; agentInsight?: any; agentName?: strin
   });
 }
 
-async function callModel(pack: { query: string; health: unknown; relevantInsights: any[] }): Promise<AskAnswer> {
+async function callModel(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[] }): Promise<AskAnswer> {
   const prompt = buildPrompt(pack);
   const raw = await dispatch(prompt);
   return adapt(raw, pack);
 }
 
-function buildPrompt(pack: { query: string; health: unknown; relevantInsights: any[] }) {
+function buildPrompt(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[] }) {
+  const manualSnippet = (pack.manualHits ?? []).slice(0, 5).map((h) => ({
+    id: h.id,
+    title: h.title,
+    snippet: h.snippet,
+    source: h.source,
+    score: h.score
+  }));
   return [
     "You are BunonBrain, the factory-floor operations assistant for a Bangladeshi RMG factory.",
     "Three specialist agents back you: line-throughput-agent (line efficiency + bottlenecks), maintenance-agent (machine telemetry + failure prediction), manager-agent (routes questions, drafts the morning brief).",
-    "Answer the user's question using the context pack below.",
+    "Answer the user's question using the context pack below. Cite the manuals below by `doc-N` id when relevant (use the `manuals` domain in `evidence`).",
     "Return ONLY JSON matching this shape:",
     JSON.stringify(
       {
@@ -122,7 +134,7 @@ function buildPrompt(pack: { query: string; health: unknown; relevantInsights: a
         factors: [
           { label: "string", labelBn: "string", magnitude: "string", magnitudeBn: "string" }
         ],
-        evidence: [{ domain: "orders|customers|products|inventory|conversations|policies|suppliers", count: 0 }],
+        evidence: [{ domain: "orders|customers|products|inventory|conversations|policies|suppliers|manuals", count: 0 }],
         recommendation: {
           title: "string",
           titleBn: "string",
@@ -137,7 +149,8 @@ function buildPrompt(pack: { query: string; health: unknown; relevantInsights: a
     ),
     "Question: " + pack.query,
     "Health: " + JSON.stringify(pack.health),
-    "Relevant insights: " + JSON.stringify(pack.relevantInsights.map((i) => ({ id: i.id, title: i.title, finding: i.finding })))
+    "Relevant insights: " + JSON.stringify(pack.relevantInsights.map((i) => ({ id: i.id, title: i.title, finding: i.finding }))),
+    "Manual corpus hits (cite these by id): " + JSON.stringify(manualSnippet)
   ].join("\n\n");
 }
 

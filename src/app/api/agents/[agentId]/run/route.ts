@@ -7,6 +7,7 @@
 import { NextRequest } from "next/server";
 import { dataset } from "@/services/dataset";
 import { agentService } from "@/services/agent.service";
+import { factoryTools } from "@/services/factory.tools";
 import { buildRunDraft, persistAgentRun, type RunInsightInput } from "@/services/run.persistence";
 
 export const runtime = "nodejs";
@@ -47,6 +48,21 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ agentId: 
     const prompt = buildPrompt(agent, seed);
     const raw = await dispatch(prompt);
     const draft = adaptLiveRaw(raw, agent.id, agent.name, seed);
+    // Enrich with manual citations: the LLM may have surfaced its own
+    // `manuals` rows in `evidence`, but we always merge in any titles we
+    // can match via the search_manual tool as a safety net.
+    const manualHits = factoryTools.search_manual(seed.finding, { limit: 2 }).hits;
+    if (manualHits.length) {
+      draft.evidence = [
+        ...(draft.evidence ?? []),
+        {
+          domain: "manuals",
+          count: manualHits.length,
+          filter: { source: "search_manual", agentId: agent.id },
+          previewIds: manualHits.map((h) => h.id)
+        }
+      ];
+    }
     const persisted = persistAgentRun(agent.id, agent.name, draft, { source: "live" });
     return Response.json({ source: "live", agentId, ...persisted });
   } catch (err) {
@@ -58,7 +74,10 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ agentId: 
 
 /** Demo fallback: persists a structured insight (risk-tiered for the
  *  maintenance agent, bottleneck recommendation for the line/throughput
- *  agent) drawn from the existing insight seeds + the factory graph. */
+ *  agent) drawn from the existing insight seeds + the factory graph.
+ *  When the seeded insight title pulls up relevant manual docs (via the
+ *  `search_manual` tool), the persisted evidence array includes a `manuals`
+ *  row — the same corpus the Ask page surfaces. */
 function persistDemoRun(agentId: string, agentLabel: string, warning?: string) {
   const match = dataset.insights.find((i) => i.agentId === agentId);
   const seedTitle = match?.title ?? `${agentLabel} produced a draft insight`;
@@ -69,6 +88,12 @@ function persistDemoRun(agentId: string, agentLabel: string, warning?: string) {
   const seedActionBn = match?.recommendation.actionBn ?? "ব্রিফ খুলুন এবং প্রস্তাবিত পরবর্তী পদক্ষেপ অনুমোদন দিন।";
   const seedRisk = match?.recommendation.riskTier ?? "medium";
   const seedConfidence = match?.confidence ?? 0.7;
+
+  // Pull manual citations relevant to the insight title; the `search_manual`
+  // tool already rank-orders by token overlap. Cap to two so the evidence
+  // row stays readable.
+  const locale: "en" | "bn" = /[\u0980-\u09FF]/.test(seedTitle) ? "bn" : "en";
+  const manualHits = factoryTools.search_manual(seedTitle, { locale, limit: 2 }).hits;
 
   const draft: RunInsightInput = buildRunDraft(agentId, agentLabel, {
     title: seedTitle,
@@ -81,6 +106,22 @@ function persistDemoRun(agentId: string, agentLabel: string, warning?: string) {
     confidence: seedConfidence
   });
 
+  // If manuals surfaced for this seed title, attach a `manuals` evidence
+  // row so downstream consumers (Manager agent feed, EvidenceBlock) can
+  // render the citations. Leave the rest of the evidence handling to
+  // `gatherStoreEvidence()` when the draft's evidence is empty.
+  if (manualHits.length) {
+    draft.evidence = [
+      ...(draft.evidence ?? []),
+      {
+        domain: "manuals",
+        count: manualHits.length,
+        filter: { source: "search_manual", agentId },
+        previewIds: manualHits.map((h) => h.id)
+      }
+    ];
+  }
+
   return persistAgentRun(agentId, agentLabel, draft, { source: "demo" });
 }
 
@@ -92,8 +133,12 @@ function pickInsightFactors(agentId: string): { finding: string } {
 }
 
 function buildPrompt(agent: { id: string; name: string; purpose: string }, seed: { finding: string }) {
+  // Pull a couple of manual hits so the LLM can cite them by `doc-N` id.
+  const manualHits = factoryTools.search_manual(seed.finding, { limit: 3 }).hits
+    .map((h) => ({ id: h.id, title: h.title, snippet: h.snippet, source: h.source }));
   return [
     "You are BunonBrain. Produce one short, actionable insight in JSON.",
+    "You may cite manuals by setting `evidence` rows with `domain: \"manuals\"` and `previewIds: [\"doc-N\", ...]`.",
     JSON.stringify({
       title: "string (≤ 200 chars)",
       titleBn: "string (≤ 200 chars, Bangla)",
@@ -107,11 +152,13 @@ function buildPrompt(agent: { id: string; name: string; purpose: string }, seed:
         riskTier: "low|medium|high",
         targetStage: "suggested|pending_approval"
       },
+      evidence: [{ domain: "orders|customers|products|inventory|conversations|policies|suppliers|manuals", count: 0 }],
       confidence: 0.7
     }),
     `Agent: ${agent.name} (${agent.id})`,
     `Purpose: ${agent.purpose}`,
-    `Latest known signal: ${seed.finding}`
+    `Latest known signal: ${seed.finding}`,
+    `Available manual citations: ${JSON.stringify(manualHits)}`
   ].join("\n\n");
 }
 

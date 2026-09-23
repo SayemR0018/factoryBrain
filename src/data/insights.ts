@@ -11,7 +11,7 @@ export type InsightStage = "suggested" | "pending_approval" | "executing" | "don
 export type RiskTier = "low" | "medium" | "high";
 
 export type EvidenceRef = {
-  domain: "orders" | "customers" | "products" | "inventory" | "conversations" | "policies" | "suppliers";
+  domain: "orders" | "customers" | "products" | "inventory" | "conversations" | "policies" | "suppliers" | "manuals";
   count: number;
   filter?: Record<string, string | number | boolean>;
   previewIds?: string[];

@@ -127,6 +127,26 @@ export const evidenceService = {
           }))
         };
       }
+      case "manuals": {
+        const { getManualCorpus } = require("@/data/manuals") as typeof import("@/data/manuals");
+        const docs = getManualCorpus();
+        const ids = new Set(ref.previewIds ?? []);
+        const filtered = ids.size === 0 ? docs : docs.filter((d) => ids.has(d.id));
+        return {
+          domain: "manuals",
+          columns: ["id", "titleEn", "source", "tags"],
+          rows: filtered.slice(offset, offset + pageSize).map((d) => ({
+            id: d.id,
+            titleEn: d.titleEn,
+            source: d.source,
+            tags: d.tags.join(", ")
+          }))
+        };
+      }
     }
+    // Exhaustive — every domain above returns. Keep the line below for
+    // `noImplicitReturns` so TS still type-checks when a domain is added
+    // without a corresponding case.
+    return { domain: ref.domain, columns: [], rows: [] };
   }
 };

@@ -44,7 +44,8 @@ export const RunInsightShape = z.object({
           "inventory",
           "conversations",
           "policies",
-          "suppliers"
+          "suppliers",
+          "manuals"
         ]),
         count: z.number().int().nonnegative(),
         filter: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),

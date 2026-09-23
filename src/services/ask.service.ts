@@ -49,13 +49,20 @@ export const askService = {
       labelBn: (n as any).name ?? (n as any).id,
       status: n.status as any
     }));
+    // Manual corpus citations — drive the `manuals` evidence domain in the
+    // demo answer + the live LLM prompt. Locale follows the query shape.
+    const locale: "en" | "bn" = /[\u0980-\u09FF]/.test(query) ? "bn" : "en";
+    const manualHits = factoryTools.search_manual(query, { locale, limit: 5 }).hits;
     return {
       query,
       scope: agentId ? [agentId] : undefined,
       health: dataset.health,
       relevantInsights: insights,
-      relevantEntities: nodes
-    };
+      relevantEntities: nodes,
+      // Attach manual hits for the live prompt to surface; the demo path
+      // re-derives them per branch below so it can dedupe by domain.
+      manualHits
+    } as AskContextPack & { manualHits: typeof manualHits };
   },
   // Returns a streaming generator. Each yielded chunk is one of the answer blocks.
   async *stream(pack: AskContextPack): AsyncGenerator<StreamChunk> {
@@ -63,6 +70,20 @@ export const askService = {
     const wantRisk = /risk|miss|at.risk|ঝুঁকি|মিস/.test(q);
     const wantEfficiency = /efficiency|target|দক্ষতা|লক্ষ্য/.test(q);
     const wantMaintenance = /maintenance|machine|broken|fix|রক্ষণাবেক্ষণ|মেশিন/.test(q);
+    const locale: "en" | "bn" = /[\u0980-\u09FF]/.test(pack.query) ? "bn" : "en";
+    const manualHits = (pack as any).manualHits as ReturnType<typeof factoryTools.search_manual>["hits"] | undefined
+      ?? factoryTools.search_manual(pack.query, { locale, limit: 5 }).hits;
+
+    // Build a single evidence block from `manualHits` (if any) so the demo
+    // answer can include citations in its `evidence` array regardless of
+    // branch.
+    const manualEvidence: EvidenceRefPublic[] = manualHits.length
+      ? [{
+          domain: "manuals",
+          count: manualHits.length,
+          previewIds: manualHits.map((h) => h.id)
+        }]
+      : [];
 
     if (wantMaintenance || pack.scope?.includes("maintenance-agent")) {
       const machines = factoryTools.get_machine_health();
@@ -86,7 +107,8 @@ export const askService = {
       await sleep(140);
       const evidence: EvidenceRefPublic[] = [
         { domain: "inventory", count: machines.length, previewIds: machines.slice(0, 6).map((m) => m.machine.id) },
-        { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] }
+        { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] },
+        ...manualEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -123,7 +145,8 @@ export const askService = {
       await sleep(140);
       const evidence: EvidenceRefPublic[] = [
         { domain: "orders", count: focus.ordersAtRisk, filter: { lineId: focus.line.id } },
-        { domain: "inventory", count: 1, filter: { machineScope: focus.line.id } }
+        { domain: "inventory", count: 1, filter: { machineScope: focus.line.id } },
+        ...manualEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -160,7 +183,8 @@ export const askService = {
       yield { type: "factor", index: 2, payload: factors.length ? factors : [{ label: "No lines at risk", labelBn: "কোনো লাইন ঝুঁকিতে নেই", magnitude: "—", magnitudeBn: "—" }] };
       await sleep(140);
       const evidence: EvidenceRefPublic[] = [
-        { domain: "orders", count: atRisk.reduce((a, l) => a + l.ordersAtRisk, 0), previewIds: atRisk.slice(0, 4).map((l) => l.line.id) }
+        { domain: "orders", count: atRisk.reduce((a, l) => a + l.ordersAtRisk, 0), previewIds: atRisk.slice(0, 4).map((l) => l.line.id) },
+        ...manualEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -191,7 +215,7 @@ export const askService = {
       await sleep(160);
       const factors: { label: string; labelBn: string; magnitude: string; magnitudeBn: string }[] = [];
       yield { type: "factor", index: 2, payload: factors };
-      yield { type: "evidence", index: 3, payload: [] as EvidenceRefPublic[] };
+      yield { type: "evidence", index: 3, payload: manualEvidence };
       yield { type: "recommendation", index: 4, payload: {
         title: "Ask a specific question next",
         titleBn: "পরবর্তীতে একটি নির্দিষ্ট প্রশ্ন জিজ্ঞাসা করুন",

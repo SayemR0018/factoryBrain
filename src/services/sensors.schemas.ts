@@ -53,3 +53,42 @@ export type SensorSourceT = z.infer<typeof SensorSourceSchema>;
 export type FloorAlertT = z.infer<typeof FloorAlertSchema>;
 export type FloorAlertChannelT = z.infer<typeof FloorAlertChannelSchema>;
 export type FloorAlertSeverityT = z.infer<typeof FloorAlertSeveritySchema>;
+
+// --- Vision / manual-docs domain ------------------------------------------
+
+/** One captured-frame anomaly detection result. */
+export const VisionResultSchema = z.object({
+  id: z.string().min(1),
+  sampleFile: z.string().min(1),
+  anomalyLabelEn: z.string().min(1),
+  anomalyLabelBn: z.string().min(1),
+  repairStepsEn: z.array(z.string().min(1)).min(1),
+  repairStepsBn: z.array(z.string().min(1)).min(1),
+  /** 0..1 model confidence. */
+  confidence: z.number().min(0).max(1),
+  /** Optional link to a machine id (matches factory.store.ts seed). */
+  machineId: z.string().min(1).optional(),
+  /** ISO 8601 timestamp. */
+  createdAt: z.string().min(1)
+});
+
+export const VisionResultListSchema = z.array(VisionResultSchema);
+
+export const DocSourceSchema = z.enum(["manual", "sensor_log"]);
+
+/** Manual knowledge doc surfaced to Ask BunonBrain context. */
+export const ManualDocSchema = z.object({
+  id: z.string().min(1),
+  titleEn: z.string().min(1),
+  titleBn: z.string().min(1),
+  tags: z.array(z.string().min(1)).default([]),
+  bodyEn: z.string().min(1),
+  bodyBn: z.string().min(1),
+  source: DocSourceSchema
+});
+
+export const ManualDocListSchema = z.array(ManualDocSchema);
+
+export type VisionResultT = z.infer<typeof VisionResultSchema>;
+export type DocSourceT = z.infer<typeof DocSourceSchema>;
+export type ManualDocT = z.infer<typeof ManualDocSchema>;

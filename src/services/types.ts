@@ -96,7 +96,18 @@ export type Stage =
 export type RiskTier = "low" | "medium" | "high";
 
 export type EvidenceRefPublic = {
-  domain: "orders" | "customers" | "products" | "inventory" | "conversations" | "policies" | "suppliers";
+  // `manuals` is a new domain used for citations from `src/data/manuals.ts`
+  // — surfaces as `EvidenceBlock` rows that link to a specific manual id
+  // (e.g. doc-3 = "Buttonhole calibration").
+  domain:
+    | "orders"
+    | "customers"
+    | "products"
+    | "inventory"
+    | "conversations"
+    | "policies"
+    | "suppliers"
+    | "manuals";
   count: number;
   filter?: Record<string, string | number | boolean>;
   previewIds?: string[];

@@ -49,9 +49,12 @@ export function FloorAlertsPanel() {
     void refresh(ctrl.signal);
     // Poll so alerts raised by agent runs land without a page reload.
     const id = setInterval(() => void refresh(), 7000);
+    const onRefresh = () => void refresh();
+    window.addEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
     return () => {
       clearInterval(id);
       ctrl.abort();
+      window.removeEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
     };
   }, [refresh]);
 
@@ -83,12 +86,20 @@ export function FloorAlertsPanel() {
             <Bell size={14} />
           </span>
           <div className="min-w-0">
-            <p className="text-body text-fg-primary">Floor alerts (whatsapp_sim)</p>
+            <p className="text-body text-fg-primary">
+              {locale === "bn" ? "ফ্লোর অ্যালার্ট (whatsapp_sim)" : "Floor alerts (whatsapp_sim)"}
+            </p>
             <p className="text-caption text-fg-tertiary">
               {error
-                ? "Tap retry — last fetch failed."
+                ? locale === "bn"
+                  ? "পুনরায় চেষ্টা করুন — শেষ ফেচ ব্যর্থ।"
+                  : "Tap retry — last fetch failed."
                 : loading
-                ? "Syncing…"
+                ? locale === "bn"
+                  ? "সিঙ্ক হচ্ছে…"
+                  : "Syncing…"
+                : locale === "bn"
+                ? `${alerts?.length ?? 0} অ্যালার্ট · ${unread} অপঠিত`
                 : `${alerts?.length ?? 0} alerts · ${unread} unread`}
             </p>
           </div>
@@ -175,7 +186,13 @@ export function FloorAlertsPanel() {
                       disabled={pendingId === a.id}
                       onClick={() => void markRead(a.id, !a.read)}
                     >
-                      {a.read ? "Mark unread" : "Mark read"}
+                      {a.read
+                        ? locale === "bn"
+                          ? "অপঠিত করুন"
+                          : "Mark unread"
+                        : locale === "bn"
+                        ? "পঠিত"
+                        : "Mark read"}
                     </Button>
                   </div>
                 </div>

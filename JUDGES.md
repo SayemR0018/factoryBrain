@@ -62,8 +62,8 @@ Open <http://localhost:3000> (or the deployed URL).
 
 ## 4. Vision → sample analyze (~30s)
 
-1. Sidebar → **Vision repair** (`/app/vision`).
-2. Click **Choose one of the staged images** → pick any sample.
+1. Sidebar → **Vision repair** (`/app/vision`) — enabled by default; toggle in Settings if missing.
+2. Pick any staged sample tile → click **Analyze**.
 3. Click **Analyze**. The route `POST /api/vision/analyze` returns a
    bilingual repair instruction (Bangla + English).
 4. The result is persisted as an Insight with real `manuals` / `inventory`
@@ -94,9 +94,8 @@ Open <http://localhost:3000> (or the deployed URL).
    - Recommended duty (50–95 % safe window)
    - Expected kWh saved
    - Inline rationale, tinted by risk tier
-2. Click the **manuals** link in the card — it deep-links to the
-   "Energy spike on Line 4 compressor" manual doc that powers the
-   recommendation rationale.
+2. Click **Ask: Line 4 compressor manual** on the card — opens Ask prefilled
+   with a compressor-duty query so `search_manual` cites doc-5.
 
 ---
 

@@ -147,6 +147,20 @@ async function main() {
   const layout = await read("src/app/layout.tsx");
   assert(layout.includes("BunonBrain"), "layout metadata mentions BunonBrain");
 
+
+  // Frontend polish checks (Builder)
+  const bizStore = await read("src/store/business.store.ts");
+  assert(bizStore.includes("visionRepair: true"), "visionRepair defaults on for judges");
+  const sidebar = await read("src/components/layout/Sidebar.tsx");
+  assert(sidebar.includes("s.featureFlags.visionRepair"), "sidebar reacts to visionRepair flag");
+  const overviewUi = await read("src/app/app/page.tsx");
+  assert(overviewUi.includes("judge-walkthrough"), "overview has demo path strip");
+  assert(overviewUi.includes("/app/ask?q="), "energy duty links to Ask with q=");
+  const visionPage = await read("src/app/app/vision/page.tsx");
+  assert(visionPage.includes("SAMPLE_FILES.map"), "vision uses sample grid picker");
+  const agentsPage = await read("src/app/app/agents/page.tsx");
+  assert(agentsPage.includes("agents-run-banner"), "agents shows post-run banner");
+
   console.log("\nAll smoke checks passed.");
 }
 

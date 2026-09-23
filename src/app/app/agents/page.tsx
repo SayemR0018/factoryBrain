@@ -37,6 +37,12 @@ export default function AgentsPage() {
   // insight slice re-derive from the updated `dataset.insights` / approvals
   // queue. Without this the freshly-persisted insight never surfaces here.
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastRunBanner, setLastRunBanner] = useState<{
+    agentId: string;
+    insightId?: string;
+    approvalPending?: boolean;
+    floorAlertId?: string;
+  } | null>(null);
   // Re-derive on a soft tick as a safety net (covers manager-agent runs that
   // mutate the dataset outside this page's local refresh).
   useEffect(() => {
@@ -147,6 +153,14 @@ export default function AgentsPage() {
       // window event so /app/insights and /app/approvals (which mount a
       // fresh listener in their own lifecycle) refresh immediately.
       setRefreshKey((n) => n + 1);
+      if (lastResult?.insight?.id) {
+        setLastRunBanner({
+          agentId,
+          insightId: lastResult.insight.id as string,
+          approvalPending: Boolean(lastResult.approvalPending),
+          floorAlertId: lastResult.floorAlertId as string | undefined
+        });
+      }
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("bunonbrain:insights-refresh"));
       }
@@ -161,6 +175,27 @@ export default function AgentsPage() {
 
   return (
     <div className="flex flex-col h-full" data-tour="agents">
+      {lastRunBanner?.insightId && (
+        <div className="mx-6 md:mx-8 mt-2 mb-0 surface-2 border border-[var(--accent-border)] rounded-md px-3 py-2 flex flex-wrap items-center gap-3" data-tour="agents-run-banner">
+          <span className="text-caption text-fg-primary">
+            {locale === "bn" ? "রান সম্পন্ন — পরবর্তী ধাপ:" : "Run complete — next:"}
+          </span>
+          <a href={`/app/insights?focus=${lastRunBanner.insightId}`} className="text-caption text-accent hover:underline">
+            {locale === "bn" ? "ইনসাইট" : "Insight"}
+          </a>
+          {lastRunBanner.approvalPending && (
+            <a href={`/app/approvals?focus=${lastRunBanner.insightId}`} className="text-caption text-accent hover:underline">
+              {locale === "bn" ? "অনুমোদন" : "Approval"}
+            </a>
+          )}
+          <a href="/app/activity" className="text-caption text-accent hover:underline">
+            {locale === "bn" ? "অ্যাক্টিভিটি / ফ্লোর অ্যালার্ট" : "Activity / floor alerts"}
+          </a>
+          <button type="button" className="ml-auto text-caption text-fg-tertiary hover:text-fg-primary" onClick={() => setLastRunBanner(null)}>
+            {locale === "bn" ? "বন্ধ" : "Dismiss"}
+          </button>
+        </div>
+      )}
       <div className="px-6 md:px-8 py-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-display font-semibold tracking-tight">{t("agents.title")}</h1>

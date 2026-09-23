@@ -19,7 +19,7 @@ import {
   RotateCcw,
   UserCircle2
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/useT";
 import { askService } from "@/services/ask.service";
 import { evidenceService } from "@/services/evidence.service";
@@ -72,6 +72,14 @@ export default function AskPage() {
   const bnSuggestions = suggestions.slice(half);
   const selectedAgent = selectedAgentId ? agentService.get(selectedAgentId) ?? null : null;
   const selectedPalette = selectedAgent ? AGENT_PALETTE[selectedAgent.glyph as AgentGlyph] : null;
+  const search = useSearchParams();
+
+  // Prefill from Overview energy-duty / JUDGES deep links (?q=...).
+  useEffect(() => {
+    const q = search?.get("q");
+    if (q && !query) setQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });

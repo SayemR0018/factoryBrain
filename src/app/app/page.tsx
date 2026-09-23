@@ -162,6 +162,31 @@ export default function OverviewPage() {
         <h1 className="mt-1 text-display font-semibold tracking-tight">{name}</h1>
       </motion.div>
 
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2 text-caption"
+        data-tour="judge-walkthrough"
+        aria-label="Demo walkthrough"
+      >
+        <span className="mono-pill text-fg-tertiary">
+          {locale === "bn" ? "ডেমো পথ:" : "Demo path:"}
+        </span>
+        <span className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-fg-secondary">
+          1. {locale === "bn" ? "সিমুলেট টিক" : "Simulate tick"}
+        </span>
+        <Link href="/app/agents" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
+          2. {locale === "bn" ? "এজেন্ট রান" : "Run agents"}
+        </Link>
+        <Link href="/app/activity" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
+          3. {locale === "bn" ? "ফ্লোর অ্যালার্ট" : "Floor alerts"}
+        </Link>
+        <Link href="/app/vision" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
+          4. Vision
+        </Link>
+        <Link href="/app/ask?q=compressor%20duty" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
+          5. Ask
+        </Link>
+      </div>
+
       <Panel
         className="mt-6"
         title={t("overview.businessHealth")}
@@ -635,11 +660,11 @@ function EnergyDutyCard({ rec, locale }: { rec: EnergyDutyTool; locale: "en" | "
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
-            href="/app/insights?focus=doc-5"
+            href="/app/ask?q=compressor%20duty%20Line%204"
             className="text-caption text-accent hover:underline inline-flex items-center gap-1"
             data-testid="energy-duty-manual-link"
           >
-            {locale === "bn" ? "ম্যানুয়াল: Line 4 কম্প্রেসর" : "Manual: Line 4 compressor"}
+            {locale === "bn" ? "Ask: Line 4 কম্প্রেসর ম্যানুয়াল" : "Ask: Line 4 compressor manual"}
             <ArrowUpRight size={12} />
           </Link>
           <Link

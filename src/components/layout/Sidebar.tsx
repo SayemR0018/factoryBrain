@@ -79,10 +79,12 @@ export function Sidebar() {
     }
   ];
 
-  // Vision Repair is gated behind a feature flag.
-  const visionEnabled = useBusinessStore.getState().featureFlags?.visionRepair;
+  // Vision Repair is gated behind a feature flag (reactive — re-renders when toggled).
+  const visionEnabled = useBusinessStore((s) => s.featureFlags.visionRepair);
   if (visionEnabled) {
-    groups[groups.length - 1].items.push({ href: "/app/vision", label: t("nav.vision"), icon: ScanLine });
+    // Park under Intelligence next to Agents — matches JUDGES.md walkthrough order.
+    const intel = groups.find((g) => g.label === t("sidebar.intelligence")) ?? groups[0];
+    intel.items.push({ href: "/app/vision", label: t("nav.vision"), icon: ScanLine });
   }
 
   return (

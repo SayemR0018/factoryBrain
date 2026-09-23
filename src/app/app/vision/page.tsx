@@ -45,15 +45,29 @@ export default function VisionPage() {
     }
   }, [enabled]);
 
+  const setFeatureFlag = useBusinessStore((s) => s.setFeatureFlag);
+
   if (!enabled) {
     return (
       <div className="px-6 md:px-8 py-6 max-w-3xl mx-auto" data-tour="vision">
         <h1 className="text-display font-semibold tracking-tight">{t("vision.title")}</h1>
         <p className="mt-1 text-caption text-fg-tertiary">
           {locale === "bn"
-            ? "বিকল্পটি এই ওয়ার্কস্পেসে অক্ষম। সেটিংসে চালু করুন।"
-            : "Vision Repair is disabled in this workspace. Enable it in Settings."}
+            ? "বিকল্পটি এই ওয়ার্কস্পেসে অক্ষম। নিচে চালু করুন বা সেটিংসে যান।"
+            : "Vision Repair is disabled in this workspace. Enable it below or in Settings."}
         </p>
+        <div className="mt-4 flex items-center gap-3">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setFeatureFlag("visionRepair", true)}
+          >
+            {locale === "bn" ? "ভিশন চালু করুন" : "Enable Vision Repair"}
+          </Button>
+          <Link href="/app/settings" className="text-caption text-accent hover:underline">
+            {locale === "bn" ? "সেটিংস →" : "Settings →"}
+          </Link>
+        </div>
       </div>
     );
   }
@@ -102,37 +116,45 @@ export default function VisionPage() {
       <h1 className="text-display font-semibold tracking-tight">{t("vision.title")}</h1>
       <p className="mt-1 text-caption text-fg-tertiary">{t("vision.body") as string}</p>
 
-      <Panel className="mt-6">
-        <div className="flex flex-col items-center gap-4">
-          <div className="size-32 rounded-md bg-surface-2 border border-border-subtle flex items-center justify-center text-fg-tertiary">
-            <Camera size={36} />
-          </div>
-          <p className="text-body text-fg-secondary">
-            {locale === "bn" ? "নমুনা ছবি:" : "Sample photo:"}{" "}
-            <span className="mono-pill text-fg-primary">{SAMPLE_FILES[fileIdx]}</span>
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
+      <Panel className="mt-6" title={locale === "bn" ? "স্টেজড নমুনা বেছে নিন" : "Choose a staged sample"}>
+        <div className="grid grid-cols-2 gap-2">
+          {SAMPLE_FILES.map((file, i) => (
+            <button
+              key={file}
+              type="button"
               onClick={() => {
-                setFileIdx((i) => (i + 1) % SAMPLE_FILES.length);
+                setFileIdx(i);
                 setAnalysis(null);
                 setError(null);
               }}
+              aria-pressed={fileIdx === i}
+              className={cn(
+                "text-left rounded-md border p-3 transition-colors press",
+                fileIdx === i
+                  ? "border-[var(--accent-border)] bg-[var(--accent-soft)]"
+                  : "border-border-subtle bg-surface-2 hover:border-border-strong"
+              )}
             >
-              {locale === "bn" ? "পরবর্তী ছবি" : "Next sample"}
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleAnalyze} disabled={busy}>
-              <Sparkles size={12} /> {busy ? "…" : (t("vision.upload") as string)}
-            </Button>
-          </div>
+              <div className="flex items-center gap-2">
+                <span className="size-8 rounded-md bg-surface border border-border-subtle flex items-center justify-center text-fg-tertiary">
+                  <Camera size={16} />
+                </span>
+                <span className="mono-pill text-fg-primary truncate">{file.replace(".jpg", "")}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="primary" size="sm" onClick={handleAnalyze} disabled={busy}>
+            <Sparkles size={12} /> {busy ? (locale === "bn" ? "বিশ্লেষণ হচ্ছে…" : "Analyzing…") : (t("vision.upload") as string)}
+          </Button>
           <span
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
             aria-label="Simulated mode"
           >
             Simulated — demo VLM mapping
           </span>
+          <span className="text-caption text-fg-tertiary mono-pill">{SAMPLE_FILES[fileIdx]}</span>
         </div>
       </Panel>
 

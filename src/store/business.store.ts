@@ -132,7 +132,8 @@ export const useBusinessStore = create<BusinessState>((set, get) => ({
   globalPaused: safeGet<boolean>("bunonbrain:globalPaused", false),
   selectedAgentId: safeGet<string | null>("bunonbrain:selectedAgentId", null),
   featureFlags: safeGet<BusinessState["featureFlags"]>("bunonbrain:featureFlags", {
-    visionRepair: false,
+    // On by default so the JUDGES.md Vision walkthrough is reachable without Settings.
+    visionRepair: true,
     whatsappAlert: true
   }),
   simulatedData: safeGet<boolean>("bunonbrain:simulatedData", true),

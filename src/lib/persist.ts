@@ -52,13 +52,10 @@ export const persist = {
 };
 
 /**
- * Returns true after the first client render. Use it to gate any UI that
- * depends on persisted state so the server and the first client render
- * produce the same markup.
+ * Returns true after the first client render. Implemented in a separate
+ * client-only module: `./useMounted.ts`. Re-export it here for the
+ * convenience of existing imports — the `"use client"` directive on the
+ * `useMounted` module keeps it out of any server bundle that pulls
+ * `persist.ts` indirectly.
  */
-import { useEffect, useState } from "react";
-export function useMounted(): boolean {
-  const [m, setM] = useState(false);
-  useEffect(() => setM(true), []);
-  return m;
-}
+export { useMounted } from "./useMounted";

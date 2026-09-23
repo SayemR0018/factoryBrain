@@ -46,6 +46,14 @@ export default function ApprovalsPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Cross-tab nudge: when /app/agents finishes a run, bump immediately
+  // (rather than waiting up to 700ms for the next soft tick).
+  useEffect(() => {
+    const onRefresh = () => setTick((n) => n + 1);
+    window.addEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
+    return () => window.removeEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
+  }, []);
+
   // Honor ?focus=apr_xx deep links by scrolling into view + highlighting.
   useEffect(() => {
     const f = search?.get("focus");

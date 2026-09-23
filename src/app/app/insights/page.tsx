@@ -25,7 +25,22 @@ export default function InsightsPage() {
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [riskFilter, setRiskFilter] = useState<RiskTier | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const groups = useMemo(() => insightService.groupedByStage(), []);
+  // Soft tick keeps the page in sync with insights that were persisted by
+  // agent runs (the runs mutate the shared `dataset.insights` array on the
+  // server side; the client re-derives via this re-render trigger).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 1500);
+    return () => clearInterval(id);
+  }, []);
+  // Manual refresh hook for components that want to nudge us after they
+  // mutate state (e.g. the agent drawer closing).
+  useEffect(() => {
+    const onRefresh = () => setTick((n) => n + 1);
+    window.addEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
+    return () => window.removeEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
+  }, []);
+  const groups = useMemo(() => insightService.groupedByStage(), [tick]);
   const agents = useMemo(() => agentService.list(), []);
   const selectedAgentId = useBusinessStore((s) => s.selectedAgentId);
   const setSelectedAgent = useBusinessStore((s) => s.setSelectedAgent);

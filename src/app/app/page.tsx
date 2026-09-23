@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowUpRight, ArrowDownRight, AlertTriangle, Sparkles, ShieldCheck, PlugZap } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, AlertTriangle, Sparkles, ShieldCheck, PlugZap, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { useT } from "@/lib/useT";
 import { Panel } from "@/components/ui/Panel";
@@ -19,8 +19,64 @@ import { businessService } from "@/services/business.service";
 import { useAppStore } from "@/store/app.store";
 import { useBusinessStore } from "@/store/business.store";
 import { connectedSourceCount } from "@/store/business.store";
+import { useFactoryBrainLiveStore, type TickSnapshot } from "@/store/factoryBrain.live.store";
 import { formatBDT, formatNumber, formatPercent, formatRelative } from "@/lib/format";
 import { useMounted } from "@/lib/persist";
+import type { SensorReading } from "@/data/sensors";
+
+/** Periodically (or manually) POST /api/sensors/ingest and store the
+ *  resulting snapshot. Reuses the SensorReading types from the route. */
+function useLiveIngest({ intervalMs = 6000 }: { intervalMs?: number }) {
+  const setSnapshot = useFactoryBrainLiveStore((s) => s.setSnapshot);
+  const setFetching = useFactoryBrainLiveStore((s) => s.setFetching);
+  const setError = useFactoryBrainLiveStore((s) => s.setError);
+  const inflight = useRef<AbortController | null>(null);
+
+  const run = useCallback(async () => {
+    if (inflight.current) inflight.current.abort();
+    const ctrl = new AbortController();
+    inflight.current = ctrl;
+    setFetching(true);
+    try {
+      const res = await fetch("/api/sensors/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+        signal: ctrl.signal
+      });
+      if (!res.ok) throw new Error(`ingest_${res.status}`);
+      const data = (await res.json()) as TickSnapshot & { readings: SensorReading[] };
+      setSnapshot({
+        tick: data.tick,
+        lines: data.lines ?? [],
+        machines: data.machines ?? [],
+        readings: data.readings ?? [],
+        appliedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        setError((e as Error).message ?? "ingest_failed");
+      }
+    } finally {
+      if (inflight.current === ctrl) inflight.current = null;
+      setFetching(false);
+    }
+  }, [setSnapshot, setFetching, setError]);
+
+  useEffect(() => {
+    // First tick on mount.
+    void run();
+    const id = setInterval(() => {
+      void run();
+    }, intervalMs);
+    return () => {
+      clearInterval(id);
+      if (inflight.current) inflight.current.abort();
+    };
+  }, [run, intervalMs]);
+
+  return { run };
+}
 
 export default function OverviewPage() {
   const { t, locale } = useT();
@@ -51,6 +107,40 @@ export default function OverviewPage() {
 
   const revDelta = health.revenuePrev30 > 0 ? (health.revenue30 - health.revenuePrev30) / health.revenuePrev30 : 0;
   const custDelta = health.activeCustomersPrev > 0 ? (health.activeCustomers - health.activeCustomersPrev) / health.activeCustomersPrev : 0;
+
+  // Live simulated sensor stream (extends the page; existing KPIs above are unchanged).
+  const { run: runTick } = useLiveIngest({ intervalMs: 6000 });
+  const snapshot = useFactoryBrainLiveStore((s) => s.snapshot);
+  const fetching = useFactoryBrainLiveStore((s) => s.fetching);
+  const liveError = useFactoryBrainLiveStore((s) => s.error);
+
+  // Snapshot-derived KPIs. A small local history buffer keeps a 12-point
+  // sparkline per metric so cards visibly move over time.
+  const [sparks, setSparks] = useState<{ eff: number[]; uptime: number[]; energy: number[] }>({
+    eff: [],
+    uptime: [],
+    energy: []
+  });
+  const liveLines = snapshot?.lines ?? [];
+  const liveMachines = snapshot?.machines ?? [];
+  const avgEff = liveLines.length
+    ? liveLines.reduce((acc, l) => acc + l.efficiency, 0) / liveLines.length
+    : 0;
+  const avgUptime = liveLines.length
+    ? liveLines.reduce((acc, l) => acc + l.uptime, 0) / liveLines.length
+    : 0;
+  const totalEnergy = liveLines.reduce((acc, l) => acc + l.energyKwh, 0);
+  const machinesDown = liveMachines.filter((m) => m.status === "down").length;
+  const machinesAtRisk = liveMachines.filter((m) => m.status === "at_risk").length;
+
+  useEffect(() => {
+    if (!snapshot) return;
+    setSparks((s) => ({
+      eff: pushSample(s.eff, avgEff, 12),
+      uptime: pushSample(s.uptime, avgUptime, 12),
+      energy: pushSample(s.energy, totalEnergy, 12)
+    }));
+  }, [snapshot, avgEff, avgUptime, totalEnergy]);
 
   return (
     <div className="px-6 md:px-8 py-6 max-w-6xl mx-auto">
@@ -92,6 +182,92 @@ export default function OverviewPage() {
             />
           </Link>
         </div>
+      </Panel>
+
+      {/* Live sensor tick — extends the page without touching existing layout. */}
+      <Panel
+        className="mt-6"
+        title="Factory Brain — live tick"
+        subtitle={
+          snapshot
+            ? `Last simulated update ${formatRelative(snapshot.appliedAt, locale)} · tick ${snapshot.tick}`
+            : "Awaiting first simulated tick…"
+        }
+        right={
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
+              aria-label="Simulated data"
+            >
+              Simulated
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void runTick()}
+              disabled={fetching}
+              data-testid="simulate-tick"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <RefreshCw size={14} className={fetching ? "animate-spin" : undefined} />
+                Simulate tick
+              </span>
+            </Button>
+          </div>
+        }
+      >
+        {!snapshot ? (
+          <p className="text-caption text-fg-tertiary">
+            {liveError
+              ? `Tick failed: ${liveError}. Retrying…`
+              : "Calling /api/sensors/ingest on mount…"}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <LiveMetric
+              label="Avg line efficiency"
+              value={formatPercent(avgEff, locale)}
+              delta={sparkDelta(sparks.eff)}
+              spark={sparks.eff}
+              locale={locale}
+              note={`${liveLines.length} lines`}
+              goodDir="up"
+            />
+            <LiveMetric
+              label="Avg uptime"
+              value={formatPercent(avgUptime, locale)}
+              delta={sparkDelta(sparks.uptime)}
+              spark={sparks.uptime}
+              locale={locale}
+              note="rolling 6s"
+              goodDir="up"
+            />
+            <LiveMetric
+              label="Energy (kWh)"
+              value={formatNumber(Math.round(totalEnergy), locale)}
+              delta={sparkDelta(sparks.energy)}
+              spark={sparks.energy}
+              locale={locale}
+              note="accumulated"
+              goodDir="down"
+            />
+            <LiveMetric
+              label="Machines down"
+              value={`${machinesDown}`}
+              delta={null}
+              locale={locale}
+              note={`${machinesAtRisk} at risk`}
+              tone={machinesDown > 0 ? "risk" : "neutral"}
+            />
+            <LiveMetric
+              label="Latest readings"
+              value={`${snapshot.readings.length}`}
+              delta={null}
+              locale={locale}
+              note={`sim tick ${snapshot.tick}`}
+            />
+          </div>
+        )}
       </Panel>
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -273,4 +449,75 @@ function greetingFor(t: (k: string, p?: Record<string, string | number>) => stri
   if (h < 12) return t("overview.greetingMorning", { name });
   if (h < 18) return t("overview.greetingAfternoon", { name });
   return t("overview.greetingEvening", { name });
+}
+
+/** Append a sample to a fixed-length rolling buffer, dropping the oldest. */
+function pushSample(buf: number[], next: number, cap: number): number[] {
+  const seed = Number.isFinite(next) ? next : 0;
+  if (buf.length < cap) return [...buf, seed];
+  return [...buf.slice(1), seed];
+}
+
+function sparkDelta(values: number[]): number | null {
+  if (!values || values.length < 2) return null;
+  const first = values[0];
+  const last = values[values.length - 1];
+  if (first === 0) return null;
+  return (last - first) / Math.abs(first);
+}
+
+function LiveMetric({
+  label,
+  value,
+  delta,
+  spark,
+  locale,
+  note,
+  goodDir = "up",
+  tone = "neutral"
+}: {
+  label: string;
+  value: string;
+  delta: number | null;
+  spark?: number[];
+  locale: "en" | "bn";
+  note?: string;
+  goodDir?: "up" | "down";
+  tone?: "neutral" | "risk";
+}) {
+  const isUp = delta !== null && delta >= 0;
+  const positive = goodDir === "up" ? isUp : !isUp;
+  const deltaColor =
+    tone === "risk"
+      ? "text-[var(--risk-high)]"
+      : delta === null
+      ? "text-fg-tertiary"
+      : positive
+      ? "text-[var(--risk-low)]"
+      : "text-[var(--risk-high)]";
+  return (
+    <div className="surface-2 p-4">
+      <p className="text-caption text-fg-tertiary">{label}</p>
+      <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">{value}</p>
+      <div className="mt-1.5 flex items-center gap-2">
+        {delta !== null && (
+          <span className={"inline-flex items-center gap-1 text-caption " + deltaColor}>
+            {isUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+            {formatPercent(Math.abs(delta), locale)}
+          </span>
+        )}
+        {note && <span className="text-caption text-fg-tertiary">{note}</span>}
+      </div>
+      {spark && spark.length > 1 && (
+        <div className="mt-3">
+          <Sparkline
+            values={spark}
+            width={220}
+            height={36}
+            stroke={positive ? "var(--risk-low)" : "var(--risk-high)"}
+          />
+        </div>
+      )}
+    </div>
+  );
 }

@@ -8,6 +8,7 @@ import { Panel } from "@/components/ui/Panel";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelative } from "@/lib/format";
 import { WhatsAppAlert } from "@/components/activity/WhatsAppAlert";
+import { FloorAlertsPanel } from "@/components/activity/FloorAlertsPanel";
 
 const outcomeStyles: Record<string, string> = {
   approved: "text-risk-low bg-risk-low/15 border-risk-low/30",
@@ -28,6 +29,10 @@ export default function ActivityPage() {
 
       <div className="mt-6">
         <WhatsAppAlert />
+      </div>
+
+      <div className="mt-6">
+        <FloorAlertsPanel />
       </div>
 
       <Panel className="mt-6">

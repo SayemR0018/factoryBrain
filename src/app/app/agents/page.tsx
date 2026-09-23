@@ -33,6 +33,16 @@ export default function AgentsPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
+  // Bumps after a server run completes so `inferStatus` and the agent-panel
+  // insight slice re-derive from the updated `dataset.insights` / approvals
+  // queue. Without this the freshly-persisted insight never surfaces here.
+  const [refreshKey, setRefreshKey] = useState(0);
+  // Re-derive on a soft tick as a safety net (covers manager-agent runs that
+  // mutate the dataset outside this page's local refresh).
+  useEffect(() => {
+    const id = setInterval(() => setRefreshKey((n) => n + 1), 1500);
+    return () => clearInterval(id);
+  }, []);
   const agents = useMemo(() => agentService.list(), []);
   const agentMode = useBusinessStore((s) => s.agentMode);
   const globalPaused = useBusinessStore((s) => s.globalPaused);
@@ -68,11 +78,11 @@ export default function AgentsPage() {
         ...a,
         x: cx + Math.cos(a0) * radius,
         y: cy + Math.sin(a0) * radius,
-        runtimeStatus: inferStatus(a.id)
+        runtimeStatus: inferStatus(a.id, refreshKey)
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agents, size.w, size.h, runningId]);
+  }, [agents, size.w, size.h, runningId, refreshKey]);
 
   const brain = useMemo(() => ({ cx: size.w / 2, cy: size.h / 2 }), [size]);
   function arc(x: number, y: number) {
@@ -91,7 +101,7 @@ export default function AgentsPage() {
 
   const isMobile = size.w < 768;
 
-  function inferStatus(id: string): "idle" | "working" | "approval" {
+  function inferStatus(id: string, _refreshKey = refreshKey): "idle" | "working" | "approval" {
     if (runningId === id) return "working";
     const ins = insightService.feed({ agentId: id, stage: "pending_approval" });
     if (ins.length > 0) return "approval";
@@ -131,6 +141,15 @@ export default function AgentsPage() {
         isoDate: new Date().toISOString()
       });
       setRunningId(null);
+      // The route persisted (or updated) an insight + approval via the
+      // shared dataset. Bump the local key so `inferStatus` and the
+      // drawer re-derive from the latest insight feed. Also fan out a
+      // window event so /app/insights and /app/approvals (which mount a
+      // fresh listener in their own lifecycle) refresh immediately.
+      setRefreshKey((n) => n + 1);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("bunonbrain:insights-refresh"));
+      }
     }
   }
 
@@ -301,6 +320,7 @@ export default function AgentsPage() {
             agent={selected}
             running={runningId === selected.id}
             mode={agentMode[selected.id]}
+            refreshKey={refreshKey}
             onRun={() => runNow(selected.id)}
             onMode={(m) => setAgentMode(selected.id, m)}
           />
@@ -351,19 +371,30 @@ function AgentPanel({
   agent,
   running,
   mode,
+  refreshKey,
   onRun,
   onMode
 }: {
   agent: AgentPublic;
   running: boolean;
   mode: "auto" | "approval" | "paused" | undefined;
+  /** Bumps after each run so the panel re-derives from the latest insight feed. */
+  refreshKey: number;
   onRun: () => void;
   onMode: (m: "auto" | "approval" | "paused") => void;
 }) {
   const { t, locale } = useT();
   const effectiveMode = mode ?? (agent.execution === "auto" ? "auto" : agent.execution === "approval_required" ? "approval" : "auto");
-  const insights = insightService.feed({ agentId: agent.id }).slice(0, 3);
-  const recent = activityService.recent({ limit: 5 }).filter((a) => a.actor === agent.id);
+  // `refreshKey` in the deps array ensures freshly-persisted insights are
+  // surfaced after a run completes.
+  const insights = useMemo(
+    () => insightService.feed({ agentId: agent.id }).slice(0, 3),
+    [agent.id, refreshKey]
+  );
+  const recent = useMemo(
+    () => activityService.recent({ limit: 5 }).filter((a) => a.actor === agent.id),
+    [agent.id, refreshKey]
+  );
   const palette = AGENT_PALETTE[agent.glyph as AgentGlyph];
 
   return (

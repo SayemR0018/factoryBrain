@@ -5,10 +5,9 @@
 // a chip, and the activity log gets a real entry either way.
 
 import { NextRequest } from "next/server";
-import { z } from "zod";
 import { dataset } from "@/services/dataset";
 import { agentService } from "@/services/agent.service";
-import { insightService } from "@/services/insight.service";
+import { buildRunDraft, persistAgentRun, type RunInsightInput } from "@/services/run.persistence";
 
 export const runtime = "nodejs";
 
@@ -37,38 +36,52 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ agentId: 
     return Response.json({ error: "agent_not_found", agentId }, { status: 404 });
   }
 
-  // Synthesise a fresh insight for this run.
-  const insightId = `ins-run-${agentId}-${Date.now().toString(36)}`;
-  const factorSeed = pickInsightFactors(agent.id);
-
   if (!live) {
-    return Response.json({
-      source: "demo",
-      agentId,
-      insightId,
-      title: `${agent.name} produced a draft insight`,
-      finding: factorSeed.finding,
-      confidence: 0.7
-    });
+    // Persist via the same persistence helpers as the live branch.
+    const persisted = persistDemoRun(agent.id, agent.name);
+    return Response.json({ source: "demo", agentId, ...persisted });
   }
 
   try {
-    const prompt = buildPrompt(agent, factorSeed);
+    const seed = pickInsightFactors(agent.id);
+    const prompt = buildPrompt(agent, seed);
     const raw = await dispatch(prompt);
-    const parsed = parseRun(raw, agent.id, insightId);
-    return Response.json({ source: "live", ...parsed });
+    const draft = adaptLiveRaw(raw, agent.id, agent.name, seed);
+    const persisted = persistAgentRun(agent.id, agent.name, draft, { source: "live" });
+    return Response.json({ source: "live", agentId, ...persisted });
   } catch (err) {
     console.error("[agent-run] live model failed, returning demo", err);
-    return Response.json({
-      source: "demo",
-      agentId,
-      insightId,
-      warning: "Live model unavailable, showing demo insight.",
-      title: `${agent.name} produced a draft insight`,
-      finding: factorSeed.finding,
-      confidence: 0.6
-    });
+    const persisted = persistDemoRun(agent.id, agent.name, "Live model unavailable, showing demo insight.");
+    return Response.json({ source: "demo", agentId, warning: "Live model unavailable, showing demo insight.", ...persisted });
   }
+}
+
+/** Demo fallback: persists a structured insight (risk-tiered for the
+ *  maintenance agent, bottleneck recommendation for the line/throughput
+ *  agent) drawn from the existing insight seeds + the factory graph. */
+function persistDemoRun(agentId: string, agentLabel: string, warning?: string) {
+  const match = dataset.insights.find((i) => i.agentId === agentId);
+  const seedTitle = match?.title ?? `${agentLabel} produced a draft insight`;
+  const seedTitleBn = match?.titleBn ?? `${agentLabel} একটি খসড়া অন্তর্দৃষ্টি তৈরি করেছে`;
+  const seedFinding = match?.finding ?? "Agent produced no observations in this window.";
+  const seedFindingBn = match?.findingBn ?? "এই উইন্ডোতে এজেন্ট কোন পর্যবেক্ষণ দেয়নি।";
+  const seedAction = match?.recommendation.action ?? "Open the brief and approve the suggested next step.";
+  const seedActionBn = match?.recommendation.actionBn ?? "ব্রিফ খুলুন এবং প্রস্তাবিত পরবর্তী পদক্ষেপ অনুমোদন দিন।";
+  const seedRisk = match?.recommendation.riskTier ?? "medium";
+  const seedConfidence = match?.confidence ?? 0.7;
+
+  const draft: RunInsightInput = buildRunDraft(agentId, agentLabel, {
+    title: seedTitle,
+    titleBn: seedTitleBn,
+    finding: warning ? `${seedFinding} (${warning})` : seedFinding,
+    findingBn: seedFindingBn,
+    action: seedAction,
+    actionBn: seedActionBn,
+    riskTier: seedRisk,
+    confidence: seedConfidence
+  });
+
+  return persistAgentRun(agentId, agentLabel, draft, { source: "demo" });
 }
 
 function pickInsightFactors(agentId: string): { finding: string } {
@@ -82,9 +95,18 @@ function buildPrompt(agent: { id: string; name: string; purpose: string }, seed:
   return [
     "You are BunonBrain. Produce one short, actionable insight in JSON.",
     JSON.stringify({
-      insightId: "string",
-      title: "string (≤ 80 chars)",
-      finding: "string (one sentence)",
+      title: "string (≤ 200 chars)",
+      titleBn: "string (≤ 200 chars, Bangla)",
+      finding: "string (one sentence, English)",
+      findingBn: "string (one sentence, Bangla)",
+      recommendation: {
+        title: "string",
+        titleBn: "string",
+        action: "string (the concrete next step)",
+        actionBn: "string (Bangla)",
+        riskTier: "low|medium|high",
+        targetStage: "suggested|pending_approval"
+      },
       confidence: 0.7
     }),
     `Agent: ${agent.name} (${agent.id})`,
@@ -93,25 +115,48 @@ function buildPrompt(agent: { id: string; name: string; purpose: string }, seed:
   ].join("\n\n");
 }
 
-function parseRun(raw: string, agentId: string, fallbackId: string) {
+/** Adapt the live model's raw text into the structured RunInsightInput that
+ *  `persistAgentRun` validates. Falls back to the seed + raw text on parse
+ *  failure so the route always emits something persistable. */
+function adaptLiveRaw(
+  raw: string,
+  agentId: string,
+  agentLabel: string,
+  seed: { finding: string }
+): RunInsightInput {
+  const fallback: RunInsightInput = buildRunDraft(agentId, agentLabel, {
+    title: `${agentLabel} produced a draft insight`,
+    titleBn: `${agentLabel} একটি খসড়া অন্তর্দৃষ্টি তৈরি করেছে`,
+    finding: raw.slice(0, 240) || seed.finding,
+    findingBn: seed.finding,
+    action: "Open the brief and approve the suggested next step.",
+    actionBn: "ব্রিফ খুলুন এবং প্রস্তাবিত পরবর্তী পদক্ষেপ অনুমোদন দিন।",
+    riskTier: "medium",
+    confidence: 0.6
+  });
+
   try {
     const m = raw.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(m ? m[0] : raw);
+    const rec = parsed.recommendation ?? {};
     return {
-      agentId,
-      insightId: parsed.insightId ?? fallbackId,
-      title: String(parsed.title ?? ""),
-      finding: String(parsed.finding ?? raw.slice(0, 240)),
-      confidence: Number(parsed.confidence ?? 0.6)
+      title: String(parsed.title ?? fallback.title),
+      titleBn: String(parsed.titleBn ?? parsed.title ?? fallback.titleBn),
+      finding: String(parsed.finding ?? fallback.finding),
+      findingBn: String(parsed.findingBn ?? parsed.finding ?? fallback.findingBn),
+      recommendation: {
+        title: String(rec.title ?? agentLabel),
+        titleBn: String(rec.titleBn ?? rec.title ?? agentLabel),
+        action: String(rec.action ?? fallback.recommendation.action),
+        actionBn: String(rec.actionBn ?? rec.action ?? fallback.recommendation.actionBn),
+        riskTier: (rec.riskTier ?? "medium") as RunInsightInput["recommendation"]["riskTier"],
+        targetStage: (rec.targetStage ?? "pending_approval") as RunInsightInput["recommendation"]["targetStage"]
+      },
+      confidence: Number(parsed.confidence ?? fallback.confidence),
+      evidence: Array.isArray(parsed.evidence) ? parsed.evidence : undefined
     };
   } catch {
-    return {
-      agentId,
-      insightId: fallbackId,
-      title: "Agent produced an insight",
-      finding: raw.slice(0, 240),
-      confidence: 0.5
-    };
+    return fallback;
   }
 }
 

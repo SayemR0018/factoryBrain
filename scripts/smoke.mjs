@@ -68,7 +68,20 @@ async function main() {
     "src/i18n/bn.ts",
     "src/i18n/registry.ts",
     "config/model-routing.yaml",
-    "config/risk-policy.yaml"
+    "config/risk-policy.yaml",
+    "src/data/sensors.ts",
+    "src/data/floorAlerts.ts",
+    "src/services/sensors.schemas.ts",
+    "src/services/run.persistence.ts",
+    "src/services/floorAlerts.server.ts",
+    "src/store/sensors.store.ts",
+    "src/store/floorAlerts.store.ts",
+    "src/store/factoryBrain.live.store.ts",
+    "src/app/api/sensors/ingest/route.ts",
+    "src/app/api/sensors/latest/route.ts",
+    "src/app/api/floor-alerts/route.ts",
+    "src/app/api/floor-alerts/[id]/route.ts",
+    "src/components/activity/FloorAlertsPanel.tsx"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -112,7 +125,23 @@ async function main() {
   const arch = await read("src/components/dev/ArchitectureView.tsx");
   assert(arch.includes("Continuous Context"), "architecture view mentions all seven layers");
 
-  // 6. Brand naming wired through i18n + layout metadata.
+  // 6. Live sensor + floor-alert wiring (improve batch)
+  const overview = await read("src/app/app/page.tsx");
+  assert(overview.includes("/api/sensors/ingest"), "overview wires /api/sensors/ingest");
+  assert(overview.includes("Simulate tick"), "overview has Simulate tick control");
+  const activity = await read("src/app/app/activity/page.tsx");
+  assert(activity.includes("FloorAlertsPanel"), "activity mounts FloorAlertsPanel");
+  const latestRoute = await read("src/app/api/sensors/latest/route.ts");
+  assert(latestRoute.includes("listLatestReadings"), "latest reads server ingest buffer");
+  assert(!latestRoute.includes("useSensorsStore"), "latest does not import client sensors store");
+  const sensorsServer = await read("src/services/sensors.server.ts");
+  assert(sensorsServer.includes("__factoryBrainSimState"), "sensors.server owns shared sim buffer");
+  assert(sensorsServer.includes("listLatestReadings"), "sensors.server exports listLatestReadings");
+  const agentRun = await read("src/app/api/agents/[agentId]/run/route.ts");
+  assert(agentRun.includes("persistAgentRun"), "agents/run persists via persistAgentRun");
+
+  // 7. Brand naming wired through i18n + layout metadata.
+
   assert(en.includes('name: "BunonBrain"'), "en: app.name is BunonBrain");
   assert(bn.includes('name: "বুননব্রেইন"'), "bn: app.name is বুননব্রেইন");
   const layout = await read("src/app/layout.tsx");

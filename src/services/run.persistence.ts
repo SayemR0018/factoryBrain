@@ -67,58 +67,177 @@ export type PersistedRun = {
 
 const FACTORY_TOOL_DOMAINS = ["orders", "inventory"] as const;
 
-/** Pull machine/line evidence from the graph (machine nodes + line risk
- *  nodes) so the persisted insight isn't just text — it cites real entities
- *  in the store. Returns previewIds only; the dataset graph is the source. */
+/** Pick `n` real ids from the given array. Returns an empty array if the
+ *  source is empty so callers can decide whether to emit the row.
+ *  Accepts a `key` parameter so callers can pick `id` (orders, policies) or
+ *  `productId` (inventory) — the field that matches what the downstream
+ *  `evidenceService.rows` consumer resolves against. */
+function takeIds(items: any[], n: number, key: "id" | "productId" = "id"): string[] {
+  return items.slice(0, n).map((x) => x[key]);
+}
+
+/** Pull domain-correct evidence from the current store/sensor summaries so
+ *  every persisted Insight carries real previewIds + non-zero counts —
+ *  never an empty cite stub. Falls back gracefully when a domain has no
+ *  rows yet (e.g. before any orders exist). */
 function gatherStoreEvidence(agentId: string): EvidenceRefPublic[] {
   const out: EvidenceRefPublic[] = [];
   try {
-    const graph = dataset.graph;
-    const machineIds = graph.nodes.filter((n) => n.kind === "machine").slice(0, 4).map((n) => n.id);
-    const lineIds = graph.nodes.filter((n) => n.kind === "line").slice(0, 3).map((n) => n.id);
-    const riskIds = graph.nodes.filter((n) => n.kind === "risk").slice(0, 3).map((n) => n.id);
+    // Real ids — each domain's previewIds must resolve via evidenceService.rows.
+    const orderIds = takeIds(dataset.orders, 6);
+    // Inventory records don't have `id` — they use `productId` which is the
+    // key the `inventory` evidence case filters on.
+    const inventoryIds = takeIds(dataset.inventory, 6, "productId");
+    const policyIds = takeIds(dataset.policies, 4);
+    const supplierIds = dataset.suppliers.slice(0, 4).map((s) => s.id);
+    // Customer / product ids are also valid previewIds for their domains.
+    const customerIds = dataset.customers.slice(0, 4).map((c) => c.id);
+    const productIds = dataset.products.slice(0, 4).map((p) => p.id);
 
     if (agentId === "maintenance-agent") {
-      out.push({
-        domain: "inventory",
-        count: machineIds.length,
-        filter: { source: "machine_telemetry", machinesAtRisk: riskIds.length },
-        previewIds: machineIds.length ? machineIds : undefined
-      });
-      if (lineIds.length) {
+      // Maintenance cares about machines and the parts inventory that
+      // supports them. Cite real inventory rows (productId) — never
+      // machine ids, which don't resolve under the inventory domain.
+      if (inventoryIds.length) {
         out.push({
-          domain: "orders",
-          count: lineIds.length,
-          filter: { linesAffected: lineIds.length },
-          previewIds: lineIds
+          domain: "inventory",
+          count: inventoryIds.length,
+          filter: { source: "machine_telemetry", focus: "spare_parts" },
+          previewIds: inventoryIds
+        });
+      }
+      if (policyIds.length) {
+        out.push({
+          domain: "policies",
+          count: policyIds.length,
+          previewIds: policyIds
         });
       }
     } else if (agentId === "line-throughput-agent") {
-      out.push({
-        domain: "orders",
-        count: lineIds.length,
-        filter: { source: "rfid_bundles", window: "2h" },
-        previewIds: lineIds
-      });
-      if (machineIds.length) {
+      // Throughput: real orders + the inventory rows that back them.
+      if (orderIds.length) {
+        out.push({
+          domain: "orders",
+          count: orderIds.length,
+          filter: { source: "rfid_bundles", window: "2h" },
+          previewIds: orderIds
+        });
+      }
+      if (inventoryIds.length) {
         out.push({
           domain: "inventory",
-          count: machineIds.length,
-          previewIds: machineIds.slice(0, 4)
+          count: inventoryIds.length,
+          previewIds: inventoryIds.slice(0, 4)
+        });
+      }
+    } else if (agentId === "vision-repair-agent") {
+      // Vision repair: cite the inventory rows a repair would draw from
+      // and the supplier rows that source them.
+      if (inventoryIds.length) {
+        out.push({
+          domain: "inventory",
+          count: inventoryIds.length,
+          filter: { source: "vision_repair_consumables" },
+          previewIds: inventoryIds
+        });
+      }
+      if (supplierIds.length) {
+        out.push({
+          domain: "suppliers",
+          count: supplierIds.length,
+          previewIds: supplierIds
         });
       }
     } else {
-      // Generic fallback — same shape, generic filter.
-      out.push({
-        domain: "orders",
-        count: lineIds.length + machineIds.length,
-        filter: { window: "run" }
-      });
+      // Generic fallback (manager-agent + any future agents) — cite one
+      // representative row from each major domain. Each row carries real
+      // ids and a non-zero count.
+      if (orderIds.length) {
+        out.push({
+          domain: "orders",
+          count: orderIds.length,
+          filter: { window: "run" },
+          previewIds: orderIds
+        });
+      }
+      if (inventoryIds.length) {
+        out.push({
+          domain: "inventory",
+          count: inventoryIds.length,
+          previewIds: inventoryIds.slice(0, 4)
+        });
+      }
+      if (policyIds.length) {
+        out.push({
+          domain: "policies",
+          count: policyIds.length,
+          previewIds: policyIds.slice(0, 2)
+        });
+      }
+      if (customerIds.length) {
+        out.push({
+          domain: "customers",
+          count: customerIds.length,
+          previewIds: customerIds
+        });
+      }
+      if (productIds.length) {
+        out.push({
+          domain: "products",
+          count: productIds.length,
+          previewIds: productIds
+        });
+      }
+    }
+
+    // If a particular branch produced no rows at all (e.g. a brand-new
+    // dataset with no orders yet), surface a single representative row so
+    // consumers never see `count: 0` empty cite stubs.
+    if (out.length === 0) {
+      const fallbackInventory = inventoryIds.length
+        ? inventoryIds
+        : orderIds.length
+        ? orderIds
+        : policyIds.length
+        ? policyIds
+        : customerIds.length
+        ? customerIds
+        : productIds.length
+        ? productIds
+        : supplierIds;
+      const domain = inventoryIds.length
+        ? "inventory"
+        : orderIds.length
+        ? "orders"
+        : policyIds.length
+        ? "policies"
+        : customerIds.length
+        ? "customers"
+        : productIds.length
+        ? "products"
+        : "suppliers";
+      if (fallbackInventory.length) {
+        out.push({
+          domain,
+          count: fallbackInventory.length,
+          previewIds: fallbackInventory
+        });
+      }
     }
   } catch {
-    // Graph may be lazily unavailable on the server; fall back to the two
-    // shared domains so the insight is still emitted.
-    FACTORY_TOOL_DOMAINS.forEach((d) => out.push({ domain: d, count: 0 }));
+    // Last-resort guard. Use the dataset's own ids if available; only
+    // fall back to `count: 0` when the dataset itself is unreachable.
+    const inventoryIds = takeIds(dataset.inventory ?? [], 4, "productId");
+    const orderIds = takeIds(dataset.orders ?? [], 4);
+    if (inventoryIds.length) {
+      out.push({ domain: "inventory", count: inventoryIds.length, previewIds: inventoryIds });
+    }
+    if (orderIds.length) {
+      out.push({ domain: "orders", count: orderIds.length, previewIds: orderIds });
+    }
+    if (out.length === 0) {
+      FACTORY_TOOL_DOMAINS.forEach((d) => out.push({ domain: d, count: 0 }));
+    }
   }
   return out;
 }

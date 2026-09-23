@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BunonBrain — Central Intelligence for the Smart Factory",
-  description: "The Central Intelligence for the Smart Factory.",
+  title: "BunonBrain — Factory Brain for mid-tier BD RMG plants",
+  description:
+    "BunonBrain is the operations layer for a mid-tier Bangladeshi garment plant. Factory Brain assembles the agents that run the floor.",
   applicationName: "BunonBrain",
   icons: {
     icon: [

@@ -4,7 +4,8 @@
 export const en = {
   app: {
     name: "BunonBrain",
-    tagline: "The Central Intelligence for the Smart Factory.",
+    tagline: "The operations layer for a mid-tier Bangladeshi garment plant.",
+    factoryProfile: "Demo plant — mid-tier BD RMG",
     simulatedBadge: "Simulated data"
   },
   nav: {
@@ -327,12 +328,12 @@ export const en = {
   onboarding: {
     welcome: {
       eyebrow: "BUNONBRAIN",
-      headline: "BunonBrain reads your floor, then assembles the AI that runs it.",
+      headline: "BunonBrain reads your BD RMG floor, then assembles the agents that run it.",
       cta: "Start"
     },
     profile: {
       title: "Tell us about your factory",
-      subtitle: "These answers seed BunonBrain and come back to you by name.",
+      subtitle: "These answers seed BunonBrain for the demo plant and come back to you by name.",
       industry: "Industry",
       industryPlaceholder: "e.g. RMG, knit, woven, denim",
       whatYouSell: "What do you produce?",
@@ -380,9 +381,9 @@ export const en = {
       }
     },
     ready: {
-      title: "Your BunonBrain is ready",
+      title: "Your Factory Brain is ready",
       lineEn: "{products} lines, {customers} buyers and {goals} targets identified for {business}.",
-      cta: "Open BunonBrain"
+      cta: "Open Factory Brain"
     }
   },
   risk: {

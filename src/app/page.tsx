@@ -37,7 +37,7 @@ export default function LandingPage() {
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="text-[40px] md:text-[64px] leading-[44px] md:leading-[68px] font-semibold tracking-tight"
         >
-          Factory Brain understands your floor,
+          Factory Brain understands your BD RMG floor,
           <br />
           <span className="text-fg-secondary">then assembles the agents that run it.</span>
         </motion.h1>
@@ -48,10 +48,11 @@ export default function LandingPage() {
           transition={{ delay: 0.15, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="mt-8 max-w-2xl text-body text-fg-secondary"
         >
-          A factory-floor operations layer for Bangladeshi RMG factories. Connect your sensor feeds,
-          watch the brain form, then ask the floor — Line Throughput, Maintenance & Uptime,
-          Manager Orchestrator — in Bangla or English. Every answer carries evidence.
-          Every action requires your sign-off when the risk warrants it.
+          BunonBrain is the operations layer for a mid-tier Bangladeshi garment plant. Connect
+          your sensor feeds, watch the Factory Brain graph form, then ask the floor — Line
+          Throughput, Maintenance & Uptime, Manager Orchestrator — in Bangla or English.
+          Every answer carries evidence. Every action waits for your sign-off when the risk
+          warrants it.
         </motion.p>
 
         <motion.div

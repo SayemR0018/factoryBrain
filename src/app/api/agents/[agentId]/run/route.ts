@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { dataset } from "@/services/dataset";
 import { agentService } from "@/services/agent.service";
 import { factoryTools } from "@/services/factory.tools";
+import { pushFloorAlert } from "@/services/floorAlerts.server";
 import { buildRunDraft, persistAgentRun, type RunInsightInput } from "@/services/run.persistence";
 
 export const runtime = "nodejs";
@@ -40,7 +41,17 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ agentId: 
   if (!live) {
     // Persist via the same persistence helpers as the live branch.
     const persisted = persistDemoRun(agent.id, agent.name);
-    return Response.json({ source: "demo", agentId, ...persisted });
+    // Maintenance / Manager agents additionally consult the deterministic
+    // energy duty tool — when its score is mid/high we layer a second
+    // Insight + FloorAlert on top so the duty recommendation surfaces
+    // through the same Approvals / Activity channels.
+    const energyInsight = maybeRaiseEnergyInsight(agent.id, agent.name);
+    return Response.json({
+      source: "demo",
+      agentId,
+      ...persisted,
+      energyInsight: energyInsight ?? undefined
+    });
   }
 
   try {
@@ -64,11 +75,24 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ agentId: 
       ];
     }
     const persisted = persistAgentRun(agent.id, agent.name, draft, { source: "live" });
-    return Response.json({ source: "live", agentId, ...persisted });
+    const energyInsight = maybeRaiseEnergyInsight(agent.id, agent.name);
+    return Response.json({
+      source: "live",
+      agentId,
+      ...persisted,
+      energyInsight: energyInsight ?? undefined
+    });
   } catch (err) {
     console.error("[agent-run] live model failed, returning demo", err);
     const persisted = persistDemoRun(agent.id, agent.name, "Live model unavailable, showing demo insight.");
-    return Response.json({ source: "demo", agentId, warning: "Live model unavailable, showing demo insight.", ...persisted });
+    const energyInsight = maybeRaiseEnergyInsight(agent.id, agent.name);
+    return Response.json({
+      source: "demo",
+      agentId,
+      warning: "Live model unavailable, showing demo insight.",
+      ...persisted,
+      energyInsight: energyInsight ?? undefined
+    });
   }
 }
 
@@ -123,6 +147,83 @@ function persistDemoRun(agentId: string, agentLabel: string, warning?: string) {
   }
 
   return persistAgentRun(agentId, agentLabel, draft, { source: "demo" });
+}
+
+/** When the agent is the maintenance or manager agent and the deterministic
+ *  energy duty score is mid/high, raise a second structured Insight + push a
+ *  FloorAlert. Returns null when no action is warranted so the route can
+ *  omit the field from its response. */
+function maybeRaiseEnergyInsight(
+  agentId: string,
+  agentLabel: string
+): { insightId: string; floorAlertId: string; score: number } | null {
+  if (agentId !== "maintenance-agent" && agentId !== "manager-agent") return null;
+  let rec;
+  try {
+    rec = factoryTools.recommend_energy_duty({ timeframe: "1h" });
+  } catch {
+    return null;
+  }
+  if (rec.score < 0.3) return null;
+
+  const riskTier: "medium" | "high" = rec.score > 0.6 ? "high" : "medium";
+  const draft: RunInsightInput = buildRunDraft(agentId, agentLabel, {
+    title: "Trim compressor duty cycle — energy spike",
+    titleBn: "কম্প্রেসর ডিউটি সাইকেল কমান — শক্তি স্পাইক",
+    finding:
+      `Latest energy readings and per-line totals imply a compressor duty score of ${rec.score.toFixed(2)}. ` +
+      `Recommendation: cap duty at ${rec.recommendedDutyPct}% (current ${rec.currentDutyPct}%); ` +
+      `expected saving ~${rec.expectedKwhSaved.toFixed(1)} kWh over the ${rec.basedOn.window} window.`,
+    findingBn:
+      `সর্বশেষ শক্তি রিডিং এবং প্রতি-লাইন মোট অনুযায়ী কম্প্রেসর ডিউটি স্কোর ${rec.score.toFixed(2)}। ` +
+      `পরামর্শ: ডিউটি ${rec.recommendedDutyPct}% এ ক্যাপ করুন (বর্তমান ${rec.currentDutyPct}%); ` +
+      `${rec.basedOn.window} উইন্ডোতে প্রত্যাশিত সঞ্চয় ~${rec.expectedKwhSaved.toFixed(1)} kWh।`,
+    action:
+      `Open the Overview Energy duty card. Apply the recommended duty ` +
+      `(${rec.currentDutyPct}% → ${rec.recommendedDutyPct}%) and re-balance the dryer cycle window.`,
+    actionBn:
+      `ওভারভিউ-এর Energy duty কার্ড দেখুন। প্রস্তাবিত ডিউটি প্রয়োগ করুন ` +
+      `(${rec.currentDutyPct}% → ${rec.recommendedDutyPct}%) এবং ড্রায়ার সাইকেল উইন্ডো পুনর্ভারসাম্য করুন।`,
+    riskTier,
+    confidence: Math.min(0.95, 0.55 + rec.score * 0.4)
+  });
+
+  // Cite the energy compressor manual + an inventory row pointing at the
+  // most-affected line(s). previewIds uses doc-5 ("Energy spike on Line 4
+  // compressor") when the recommendation is floor-wide.
+  draft.evidence = [
+    ...(draft.evidence ?? []),
+    {
+      domain: "manuals",
+      count: 1,
+      filter: { source: "recommend_energy_duty" },
+      previewIds: ["doc-5"]
+    },
+    {
+      domain: "inventory",
+      count: rec.basedOn.lineCount,
+      filter: { energyScore: rec.score, window: rec.basedOn.window }
+    }
+  ];
+
+  const persisted = persistAgentRun(agentId, agentLabel, draft, { source: "demo" });
+
+  const alert = pushFloorAlert({
+    id: `alert-energy-${Date.now().toString(36)}`,
+    channel: "whatsapp_sim",
+    insightId: persisted.insight.id,
+    bodyEn:
+      `${agentLabel}: trim compressor duty ${rec.currentDutyPct}% → ${rec.recommendedDutyPct}% ` +
+      `(score ${rec.score.toFixed(2)}, expected ${rec.expectedKwhSaved.toFixed(1)} kWh saved).`,
+    bodyBn:
+      `${agentLabel}: কম্প্রেসর ডিউটি ${rec.currentDutyPct}% → ${rec.recommendedDutyPct}% এ কমান ` +
+      `(স্কোর ${rec.score.toFixed(2)}, প্রত্যাশিত ${rec.expectedKwhSaved.toFixed(1)} kWh সঞ্চয়)।`,
+    severity: riskTier === "high" ? "critical" : "warn",
+    createdAt: new Date().toISOString(),
+    read: false
+  });
+
+  return { insightId: persisted.insight.id, floorAlertId: alert.id, score: rec.score };
 }
 
 function pickInsightFactors(agentId: string): { finding: string } {

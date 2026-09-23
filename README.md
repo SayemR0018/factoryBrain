@@ -1,8 +1,10 @@
-# BunonBrain — Central Intelligence for the Smart Factory
+# BunonBrain — Factory Brain for a mid-tier BD RMG plant
 
-> The Central Intelligence for the Smart Factory.
+> One demo factory profile: BunonBrain / Factory Brain, mid-tier Bangladeshi garment plant.
 
-BunonBrain is a Next.js 15 / TypeScript dashboard for Bangladeshi garment (RMG) factories. It surfaces an **AI workforce** — three agents (Line Throughput, Maintenance & Uptime, Manager Orchestrator) — built on top of a live **Factory Brain** graph and a synthetic sensor stream shaped like real RFID bundle scans, machine telemetry, and energy meter readings. The current build runs on deterministic mock data so the demo works with zero external accounts. A small live slice can be enabled by setting `LLM_API_KEY`.
+BunonBrain is a Next.js 15 / TypeScript dashboard for a mid-tier Bangladeshi garment (RMG) plant. It surfaces an **AI workforce** — three agents (Line Throughput, Maintenance & Uptime, Manager Orchestrator) — built on top of a live **Factory Brain** graph and a synthetic sensor stream shaped like real RFID bundle scans, machine telemetry, and energy meter readings. The current build runs on deterministic mock data so the demo works with zero external accounts. A small live slice can be enabled by setting `LLM_API_KEY`.
+
+Every screen, every seed record and every piece of copy in this build assumes the **same** demo plant — a mid-tier Bangladeshi garment manufacturer. Rename `NEXT_PUBLIC_APP_NAME` only if you intentionally want a different demo profile.
 
 Built for the IndustrySphere AI Challenge at CloudCamp Bangladesh (International AI Builders Congress 2026).
 

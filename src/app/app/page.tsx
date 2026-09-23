@@ -16,6 +16,8 @@ import { insightService } from "@/services/insight.service";
 import { approvalService } from "@/services/approval.service";
 import { activityService } from "@/services/activity.service";
 import { businessService } from "@/services/business.service";
+import { factoryTools } from "@/services/factory.tools";
+import type { EnergyDutyTool } from "@/services/factory.tools";
 import { useAppStore } from "@/store/app.store";
 import { useBusinessStore } from "@/store/business.store";
 import { connectedSourceCount } from "@/store/business.store";
@@ -142,6 +144,17 @@ export default function OverviewPage() {
     }));
   }, [snapshot, avgEff, avgUptime, totalEnergy]);
 
+  // Deterministic compressor duty recommendation. Re-derives whenever the
+  // live snapshot advances so the card visibly responds to the tick.
+  const energyRec = useMemo<EnergyDutyTool | null>(() => {
+    if (!snapshot) return null;
+    try {
+      return factoryTools.recommend_energy_duty({ timeframe: "1h" });
+    } catch {
+      return null;
+    }
+  }, [snapshot]);
+
   return (
     <div className="px-6 md:px-8 py-6 max-w-6xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -267,6 +280,38 @@ export default function OverviewPage() {
               note={`sim tick ${snapshot.tick}`}
             />
           </div>
+        )}
+      </Panel>
+
+      {/* Deterministic compressor duty recommendation. Explicit
+          Simulated / not-RL labeling so the demo surface never reads as a
+          learned policy. */}
+      <Panel
+        className="mt-6"
+        title="Energy duty recommendation"
+        subtitle={
+          energyRec
+            ? `${energyRec.basedOn.window} window · ${energyRec.basedOn.sensorReadings} energy readings · ${energyRec.basedOn.lineCount} lines`
+            : "Awaiting first energy reading…"
+        }
+        right={
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
+              aria-label="Simulated — not reinforcement learning"
+              data-testid="energy-duty-simulated-pill"
+            >
+              Simulated · not RL
+            </span>
+          </div>
+        }
+      >
+        {!energyRec ? (
+          <p className="text-caption text-fg-tertiary">
+            The compressor duty card surfaces once the live tick streams its first energy reading.
+          </p>
+        ) : (
+          <EnergyDutyCard rec={energyRec} locale={locale} />
         )}
       </Panel>
 
@@ -518,6 +563,93 @@ function LiveMetric({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Renders the deterministic compressor duty recommendation: current →
+ *  recommended duty %, expected kWh saved, rationale, and a deep-link to
+ *  the related manual (doc-5 — "Energy spike on Line 4 compressor").
+ *  No ML / RL surface here — the headline explicitly states that. */
+function EnergyDutyCard({ rec, locale }: { rec: EnergyDutyTool; locale: "en" | "bn" }) {
+  const delta = rec.currentDutyPct - rec.recommendedDutyPct;
+  const tone =
+    rec.score > 0.6 ? "high" : rec.score >= 0.3 ? "medium" : "low";
+  const toneSoft = `risk-${tone}-soft` as const;
+  const toneBorder = `risk-${tone}-border` as const;
+  const toneFg = `risk-${tone}` as const;
+  const rationale = locale === "bn" ? rec.rationaleBn : rec.rationaleEn;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="energy-duty-card">
+      <div className="surface-2 p-4">
+        <p className="text-caption text-fg-tertiary">Current compressor duty</p>
+        <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
+          {rec.currentDutyPct}%
+        </p>
+        <p className="mt-1 text-caption text-fg-tertiary">
+          {locale === "bn" ? "ফ্লোর-ব্যাপী গড়" : "Floor-wide average"}
+        </p>
+      </div>
+      <div className="surface-2 p-4">
+        <p className="text-caption text-fg-tertiary">Recommended duty</p>
+        <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
+          {rec.recommendedDutyPct}%
+        </p>
+        <p className="mt-1 text-caption text-fg-tertiary">
+          {delta > 0
+            ? locale === "bn"
+              ? `${delta}% কমানোর পরামর্শ`
+              : `Trim by ${delta}%`
+            : locale === "bn"
+            ? "পরিবর্তনের প্রয়োজন নেই"
+            : "No change required"}
+        </p>
+      </div>
+      <div className="surface-2 p-4">
+        <p className="text-caption text-fg-tertiary">
+          {locale === "bn" ? "প্রত্যাশিত সঞ্চয় (kWh)" : "Expected kWh saved"}
+        </p>
+        <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
+          {rec.expectedKwhSaved.toFixed(1)}
+        </p>
+        <p className="mt-1 text-caption text-fg-tertiary">
+          {locale === "bn" ? `${rec.basedOn.window} উইন্ডোতে` : `Over ${rec.basedOn.window} window`}
+        </p>
+      </div>
+
+      <div className="md:col-span-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-1">
+        <div
+          className="inline-flex items-start gap-2 px-3 py-2 rounded-md border"
+          style={{
+            backgroundColor: `var(--${toneSoft})`,
+            borderColor: `var(--${toneBorder})`
+          }}
+        >
+          <span
+            className="mt-0.5 inline-flex items-center gap-1 text-caption font-medium"
+            style={{ color: `var(--${toneFg})` }}
+          >
+            {locale === "bn" ? `স্কোর ${rec.score.toFixed(2)}` : `Score ${rec.score.toFixed(2)}`}
+          </span>
+          <p className="text-caption text-fg-primary">{rationale}</p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <Link
+            href="/app/insights?focus=doc-5"
+            className="text-caption text-accent hover:underline inline-flex items-center gap-1"
+            data-testid="energy-duty-manual-link"
+          >
+            {locale === "bn" ? "ম্যানুয়াল: Line 4 কম্প্রেসর" : "Manual: Line 4 compressor"}
+            <ArrowUpRight size={12} />
+          </Link>
+          <Link
+            href="/app/agents"
+            className="text-caption text-fg-tertiary hover:text-fg-primary"
+          >
+            {locale === "bn" ? "এজেন্ট →" : "Run an agent →"}
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

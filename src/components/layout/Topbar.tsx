@@ -24,7 +24,7 @@ export function Topbar({ onHelp }: { onHelp?: () => void }) {
   const theme = useAppStore((s) => s.theme);
   const { t } = useT();
   const mounted = useMounted();
-  const factoryName = mounted ? (businessService.getProfile().factoryName || "RMG Demo Factory") : "RMG Demo Factory";
+  const factoryName = mounted ? (businessService.getProfile().factoryName || "BunonBrain Demo Plant") : "BunonBrain Demo Plant";
   const reduceMotion = useReducedMotion();
 
   function triggerHelp() {

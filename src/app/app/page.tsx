@@ -12,6 +12,7 @@ import { StageBadge, RiskPill } from "@/components/ui/StatusPill";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
 import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
+import { BriefCard } from "@/components/overview/BriefCard";
 import { metricService } from "@/services/metric.service";
 import { insightService } from "@/services/insight.service";
 import { approvalService } from "@/services/approval.service";
@@ -186,6 +187,11 @@ export default function OverviewPage() {
         <Link href="/app/ask?q=compressor%20duty" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
           5. Ask
         </Link>
+      </div>
+
+      {/* Morning brief — deterministic demo summary (no LLM). */}
+      <div className="mt-6">
+        <BriefCard />
       </div>
 
       <Panel

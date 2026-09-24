@@ -9,7 +9,18 @@ export const en = {
     simulatedBadge: "Simulated data"
   },
   brief: {
-    fallbackNoRecs: "No new recommendations."
+    fallbackNoRecs: "No new recommendations.",
+    cardTitle: "Morning brief",
+    simulatedChip: "Demo · no LLM",
+    refreshAria: "Refresh brief",
+    retry: "Retry",
+    loadFailed: "Couldn't load the morning brief.",
+    loadFailedBody: "The deterministic feed returned no brief. Try again.",
+    risksLabelOne: "{n} risk",
+    risksLabelOther: "{n} risks",
+    approvalsLabelOne: "{n} approval pending",
+    approvalsLabelOther: "{n} approvals pending",
+    allOnTarget: "All lines are running on target."
   },
   nav: {
     overview: "Overview",

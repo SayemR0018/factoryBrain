@@ -90,6 +90,7 @@ async function main() {
     "src/app/api/line-board/route.ts",
     "src/app/api/line-board/refresh/route.ts",
     "src/components/overview/LineBoardPanel.tsx",
+    "src/components/overview/BriefCard.tsx",
     "src/services/brief.server.ts",
     "src/app/api/brief/morning/route.ts"
   ]) {
@@ -179,6 +180,35 @@ async function main() {
   assert(briefRoute.includes("Cache-Control"), "brief/morning: no-store cache header");
   assert(en.includes("brief:") && en.includes("fallbackNoRecs:"), "i18n en: brief namespace + fallbackNoRecs present");
   assert(bn.includes("brief:") && bn.includes("fallbackNoRecs:"), "i18n bn: brief namespace + fallbackNoRecs present");
+
+  // BriefCard — wiring + i18n keys.
+  const briefCard = await read("src/components/overview/BriefCard.tsx");
+  assert(briefCard.includes('export function BriefCard'), "BriefCard: component exported");
+  assert(briefCard.includes('"/api/brief/morning"'), "BriefCard: fetches /api/brief/morning");
+  assert(briefCard.includes("useFactoryBrainLiveStore"), "BriefCard: subscribes to live tick store");
+  assert(briefCard.includes("DemoChip"), "BriefCard: uses DemoChip for simulated label");
+  assert(briefCard.includes("/app/brain?node="), "BriefCard: deep-links top bottleneck to /app/brain?node=");
+  assert(briefCard.includes("/app/approvals"), "BriefCard: deep-links pending approvals to /app/approvals");
+  assert(briefCard.includes("/app/insights"), "BriefCard: deep-links risks to /app/insights");
+  assert(briefCard.includes('data-testid="brief-card"'), "BriefCard: smoke-visible testid present");
+  assert(briefCard.includes("bulletsBn"), "BriefCard: locale switches to BN bullets");
+  assert(overview.includes("<BriefCard"), "overview: mounts <BriefCard />");
+  for (const k of [
+    "cardTitle:",
+    "simulatedChip:",
+    "refreshAria:",
+    "retry:",
+    "loadFailed:",
+    "loadFailedBody:",
+    "risksLabelOne:",
+    "risksLabelOther:",
+    "approvalsLabelOne:",
+    "approvalsLabelOther:",
+    "allOnTarget:"
+  ]) {
+    assert(en.includes(k), `i18n en: has brief.${k.replace(/:$/, "")}`);
+    assert(bn.includes(k), `i18n bn: has brief.${k.replace(/:$/, "")}`);
+  }
 
   // LineBoardPanel — wiring + i18n keys.
   const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");

@@ -8,7 +8,18 @@ export const bn: Dict = {
     simulatedBadge: "সিমুলেটেড ডেটা"
   },
   brief: {
-    fallbackNoRecs: "নতুন কোনো সুপারিশ নেই।"
+    fallbackNoRecs: "নতুন কোনো সুপারিশ নেই।",
+    cardTitle: "সকালের সংক্ষেপ",
+    simulatedChip: "ডেমো · এলএলএম নেই",
+    refreshAria: "সংক্ষেপ রিফ্রেশ করুন",
+    retry: "পুনরায় চেষ্টা",
+    loadFailed: "সকালের সংক্ষেপ লোড হয়নি।",
+    loadFailedBody: "ডিটারমিনিস্টিক ফিড থেকে কোনো সংক্ষেপ পাওয়া যায়নি। আবার চেষ্টা করুন।",
+    risksLabelOne: "{n}টি ঝুঁকি",
+    risksLabelOther: "{n}টি ঝুঁকি",
+    approvalsLabelOne: "{n}টি অনুমোদন বকেয়া",
+    approvalsLabelOther: "{n}টি অনুমোদন বকেয়া",
+    allOnTarget: "সব লাইন লক্ষ্যমাত্রায় চলছে।"
   },
   nav: {
     overview: "সারসংক্ষেপ",

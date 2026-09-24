@@ -12,7 +12,8 @@ import {
   Activity,
   PlugZap,
   Settings,
-  ScanLine
+  ScanLine,
+  ClipboardCheck
 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
@@ -55,6 +56,7 @@ export function Sidebar() {
       items: [
         { href: "/app", label: t("nav.overview"), icon: LayoutDashboard },
         { href: "/app/approvals", label: t("nav.approvals"), icon: ShieldCheck, badge: approvalCount },
+        { href: "/app/qc", label: t("nav.qc"), icon: ClipboardCheck },
         { href: "/app/activity", label: t("nav.activity"), icon: Activity }
       ]
     },

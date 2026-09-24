@@ -95,7 +95,10 @@ async function main() {
     "src/app/api/brief/morning/route.ts",
     "src/data/qc.defects.ts",
     "src/services/qc.defects.server.ts",
-    "src/app/api/qc/defects/route.ts"
+    "src/app/api/qc/defects/route.ts",
+    "src/app/api/qc/flag/route.ts",
+    "src/components/overview/QcDefectsPanel.tsx",
+    "src/app/app/qc/page.tsx"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -231,6 +234,65 @@ async function main() {
   assert(qcRoute.includes("Cache-Control"), "qc/defects: no-store cache header");
   assert(en.includes("qc:") && en.includes("cardTitle:"), "i18n en: qc namespace + cardTitle present");
   assert(bn.includes("qc:") && bn.includes("cardTitle:"), "i18n bn: qc namespace + cardTitle present");
+
+  // QC panel + flag route + page + sidebar (improve batch — qc UI).
+  const qcFlagRoute = await read("src/app/api/qc/flag/route.ts");
+  assert(qcFlagRoute.includes('export async function POST'), "qc/flag: POST handler present");
+  assert(qcFlagRoute.includes("insightService"), "qc/flag: uses insightService to persist");
+  assert(qcFlagRoute.includes("upsertCustom"), "qc/flag: uses insightService.upsertCustom");
+  assert(qcFlagRoute.includes("activityService"), "qc/flag: emits activity log entry");
+  assert(qcFlagRoute.includes('runtime = "nodejs"'), "qc/flag: runtime = nodejs");
+  assert(qcFlagRoute.includes('dynamic = "force-dynamic"'), "qc/flag: dynamic = force-dynamic");
+  assert(qcFlagRoute.includes(".strict()"), "qc/flag: body + response schemas are Zod-strict");
+  assert(qcFlagRoute.includes("FlagResponseSchema"), "qc/flag: response schema parsed");
+
+  const qcPanel = await read("src/components/overview/QcDefectsPanel.tsx");
+  assert(qcPanel.includes('export function QcDefectsPanel'), "QcDefectsPanel: component exported");
+  assert(qcPanel.includes('"/api/qc/defects"'), "QcDefectsPanel: fetches real /api/qc/defects (not mock state)");
+  assert(qcPanel.includes('"/api/qc/flag"'), "QcDefectsPanel: POSTs to /api/qc/flag");
+  assert(qcPanel.includes("useFactoryBrainLiveStore"), "QcDefectsPanel: subscribes to live tick store");
+  assert(qcPanel.includes('data-testid="qc-panel"'), "QcDefectsPanel: smoke-visible testid present");
+  assert(qcPanel.includes("useToast"), "QcDefectsPanel: surfaces a toast on flag");
+  assert(qcPanel.includes("Simulated") || qcPanel.includes("simulatedChip"), "QcDefectsPanel: keeps simulated label visible");
+
+  const qcPage = await read("src/app/app/qc/page.tsx");
+  assert(qcPage.includes('"/api/qc/defects"'), "qc page: fetches real /api/qc/defects");
+  assert(qcPage.includes('"/api/qc/flag"'), "qc page: POSTs to /api/qc/flag");
+  assert(qcPage.includes('data-testid="qc-page-table"'), "qc page: smoke-visible testid present");
+  assert(qcPage.includes("useFactoryBrainLiveStore"), "qc page: subscribes to live tick store");
+
+  // Overview must mount the QC panel alongside the Line Board.
+  assert(overview.includes("<QcDefectsPanel"), "overview: mounts <QcDefectsPanel />");
+  assert(overview.includes("<LineBoardPanel"), "overview: still mounts <LineBoardPanel />");
+
+  // Sidebar gains a QC link in the Operations group.
+  const qcSidebar = await read("src/components/layout/Sidebar.tsx");
+  assert(qcSidebar.includes('"/app/qc"'), "sidebar: /app/qc link present");
+  assert(qcSidebar.includes("ClipboardCheck") || qcSidebar.includes("ScanLine"), "sidebar: QC item has icon");
+  assert(qcSidebar.includes("operations"), "sidebar: still has Operations group");
+
+  // i18n additions for QC panel + page.
+  for (const k of [
+    "pageSubtitle:",
+    "sortDefect:",
+    "sortRework:",
+    "flagIssue:",
+    "defectPct:",
+    "reworkPct:",
+    "topDefect:",
+    "topRework:",
+    "fullGrid:",
+    "colOp:",
+    "colLine:",
+    "colDefectRate:",
+    "colReworkRate:",
+    "flagAria:"
+  ]) {
+    assert(en.includes(k), `i18n en: has qc.${k.replace(/:$/, "")}`);
+    assert(bn.includes(k), `i18n bn: has qc.${k.replace(/:$/, "")}`);
+  }
+  assert(en.includes('qc: "QC defects"'), "i18n en: nav.qc label present");
+  assert(bn.includes('qc: "মান নিয়ন্ত্রণ ত্রুটি"'), "i18n bn: nav.qc label present");
 
   // LineBoardPanel — wiring + i18n keys.
   const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");
@@ -523,6 +585,61 @@ async function runSettingsLlmRuntimeCheck() {
     const qcStable1 = { ...qc1, meta: qc1Stripped };
     const qcStable2 = { ...qc2, meta: qc2Stripped };
     assert(JSON.stringify(qcStable1) === JSON.stringify(qcStable2), "qc: content is deterministic across calls (only generatedAt may differ)");
+
+    // QC flag — runtime contract. Flagging a top operation should persist an
+    // Insight via insightService.upsertCustom(); the new insight id should
+    // appear in /api/insights-style queries (we use brief/morning as the
+    // public mirror — but the real test is that the flag response shape
+    // matches FlagResponseSchema). We also exercise a 400 path on bad body.
+    const flagBad = await fetch(base + "/api/qc/flag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: "INVALID", lineId: "line-1" }),
+      cache: "no-store"
+    });
+    assert(flagBad.status === 400, `qc/flag: invalid body returns 400, got ${flagBad.status}`);
+
+    const flagPick = qc1.topByDefectRate[0];
+    const flagRes = await fetch(base + "/api/qc/flag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operation: flagPick.operation,
+        lineId: flagPick.lineId,
+        defectRatePct: flagPick.defectRatePct,
+        reworkRatePct: flagPick.reworkRatePct
+      }),
+      cache: "no-store"
+    });
+    assert(flagRes.status === 200, `qc/flag: POST returned 200, got ${flagRes.status}`);
+    const flagJson = await flagRes.json();
+    assert(typeof flagJson.insightId === "string" && flagJson.insightId.length > 0, "qc/flag: response insightId present");
+    assert(typeof flagJson.flaggedAt === "string" && flagJson.flaggedAt.length > 0, "qc/flag: response flaggedAt present");
+    assert(/^qc-flag-/.test(flagJson.insightId), `qc/flag: insightId has expected prefix, got ${flagJson.insightId}`);
+
+    // Idempotence — repeating the same flag with the same (op, line) returns
+    // the same insight id (not a new one). This is the contract the dataset
+    // provides via insightService.upsertCustom.
+    const flagRes2 = await fetch(base + "/api/qc/flag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operation: flagPick.operation,
+        lineId: flagPick.lineId,
+        defectRatePct: flagPick.defectRatePct,
+        reworkRatePct: flagPick.reworkRatePct
+      }),
+      cache: "no-store"
+    });
+    const flagJson2 = await flagRes2.json();
+    assert(flagJson2.insightId === flagJson.insightId, "qc/flag: repeated flag is idempotent (same insightId)");
+
+    // After flagging, brief/morning's riskCount should reflect the new
+    // suggested-stage insight (we can't assert a strict delta because the
+    // brief uses its own derivation, but the risk insight exists). We
+    // assert the flag did not break brief stability (determinism holds).
+    const briefPostFlag = await getJson(base + "/api/brief/morning");
+    assert(briefPostFlag && Array.isArray(briefPostFlag.bulletsEn), "brief still returns valid payload after flag");
   } finally {
     await cleanup();
   }

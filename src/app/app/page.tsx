@@ -12,6 +12,7 @@ import { StageBadge, RiskPill } from "@/components/ui/StatusPill";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
 import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
+import { QcDefectsPanel } from "@/components/overview/QcDefectsPanel";
 import { BriefCard } from "@/components/overview/BriefCard";
 import { metricService } from "@/services/metric.service";
 import { insightService } from "@/services/insight.service";
@@ -319,6 +320,13 @@ export default function OverviewPage() {
           vs SAH, WIP, NPT. Auto-refreshes when the Simulate tick above fires. */}
       <div className="mt-4">
         <LineBoardPanel />
+      </div>
+
+      {/* QC defects & rework — top operations, defect/rework rates, Flag issue
+          button to create an Insight via /api/qc/flag. Auto-refreshes with
+          the shared sim tick. */}
+      <div className="mt-6">
+        <QcDefectsPanel />
       </div>
 
       {/* Deterministic compressor duty recommendation. Explicit

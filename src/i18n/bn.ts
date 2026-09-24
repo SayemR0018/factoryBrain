@@ -21,6 +21,9 @@ export const bn: Dict = {
     approvalsLabelOther: "{n}টি অনুমোদন বকেয়া",
     allOnTarget: "সব লাইন লক্ষ্যমাত্রায় চলছে।"
   },
+  qc: {
+    cardTitle: "মান নিয়ন্ত্রণ — ত্রুটি ও রি-ওয়ার্ক"
+  },
   nav: {
     overview: "সারসংক্ষেপ",
     ask: "বুননব্রেইনকে জিজ্ঞাসা করুন",

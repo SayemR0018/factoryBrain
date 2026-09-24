@@ -22,6 +22,9 @@ export const en = {
     approvalsLabelOther: "{n} approvals pending",
     allOnTarget: "All lines are running on target."
   },
+  qc: {
+    cardTitle: "QC defects & rework"
+  },
   nav: {
     overview: "Overview",
     ask: "Ask BunonBrain",

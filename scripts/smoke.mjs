@@ -92,7 +92,10 @@ async function main() {
     "src/components/overview/LineBoardPanel.tsx",
     "src/components/overview/BriefCard.tsx",
     "src/services/brief.server.ts",
-    "src/app/api/brief/morning/route.ts"
+    "src/app/api/brief/morning/route.ts",
+    "src/data/qc.defects.ts",
+    "src/services/qc.defects.server.ts",
+    "src/app/api/qc/defects/route.ts"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -209,6 +212,25 @@ async function main() {
     assert(en.includes(k), `i18n en: has brief.${k.replace(/:$/, "")}`);
     assert(bn.includes(k), `i18n bn: has brief.${k.replace(/:$/, "")}`);
   }
+
+// QC defects — file-shape contract.
+  const qcSeed = await read("src/data/qc.defects.ts");
+  assert(qcSeed.includes("OPERATIONS"), "qc: OPERATIONS taxonomy exported");
+  assert(qcSeed.includes("recentWeekStarts"), "qc: weekStarts helper exported");
+  assert(qcSeed.includes("generateOperationLineWeeks"), "qc: per-cell generator exported");
+  const qcSvc = await read("src/services/qc.defects.server.ts");
+  assert(qcSvc.includes("QcResponseSchema"), "qc: Zod response schema exported");
+  assert(qcSvc.includes("buildQcDefects"), "qc: buildQcDefects exported");
+  assert(qcSvc.includes("QC_SIMULATED_LABEL"), "qc: simulated label exported");
+  assert(qcSvc.includes(".strict()"), "qc: response schema is Zod-strict");
+  const qcRoute = await read("src/app/api/qc/defects/route.ts");
+  assert(qcRoute.includes('export async function GET'), "qc/defects: GET handler present");
+  assert(qcRoute.includes("buildQcDefects"), "qc/defects: uses buildQcDefects");
+  assert(qcRoute.includes('runtime = "nodejs"'), "qc/defects: runtime = nodejs");
+  assert(qcRoute.includes('dynamic = "force-dynamic"'), "qc/defects: dynamic = force-dynamic");
+  assert(qcRoute.includes("Cache-Control"), "qc/defects: no-store cache header");
+  assert(en.includes("qc:") && en.includes("cardTitle:"), "i18n en: qc namespace + cardTitle present");
+  assert(bn.includes("qc:") && bn.includes("cardTitle:"), "i18n bn: qc namespace + cardTitle present");
 
   // LineBoardPanel — wiring + i18n keys.
   const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");
@@ -457,6 +479,50 @@ async function runSettingsLlmRuntimeCheck() {
     const stable1 = { ...brief1, meta: brief1Stripped };
     const stable2 = { ...brief2, meta: brief2Stripped };
     assert(JSON.stringify(stable1) === JSON.stringify(stable2), "brief: content is deterministic across calls (only generatedAt may differ)");
+
+    // QC defects — runtime contract + determinism.
+    let qc1 = null;
+    let qcLastStatus = 0;
+    const qcDeadline = Date.now() + 30_000;
+    while (Date.now() < qcDeadline) {
+      try {
+        const r = await fetch(base + "/api/qc/defects", { cache: "no-store" });
+        qcLastStatus = r.status;
+        if (r.status === 200) {
+          qc1 = await r.json();
+          break;
+        }
+        try { await r.text(); } catch {}
+      } catch {}
+      await new Promise((r2) => setTimeout(r2, 500));
+    }
+    assert(qc1 !== null, `qc: GET /api/qc/defects returned 200 within grace period (last status ${qcLastStatus})`);
+    assert(Array.isArray(qc1.operations) && qc1.operations.length === 36, `qc: operations has 36 cells (6 ops × 6 lines), got ${qc1.operations?.length}`);
+    for (const op of qc1.operations) {
+      assert(op.weeks.length === 8, `qc op ${op.operation}/${op.lineId}: 8 weekly buckets`);
+      for (const w of op.weeks) {
+        assert(/^\d{4}-\d{2}-\d{2}$/.test(w.weekStart), `qc op ${op.operation}/${op.lineId}: weekStart is YYYY-MM-DD`);
+        assert(w.defects <= w.inspected, `qc op ${op.operation}/${op.lineId}/${w.weekStart}: defects ≤ inspected`);
+        assert(w.major + w.minor === w.defects, `qc op ${op.operation}/${op.lineId}/${w.weekStart}: major+minor === defects`);
+        assert(w.rework <= w.defects, `qc op ${op.operation}/${op.lineId}/${w.weekStart}: rework ≤ defects`);
+      }
+    }
+    assert(qc1.topByDefectRate.length === 5, "qc: topByDefectRate has 5 entries");
+    assert(qc1.topByReworkRate.length === 5, "qc: topByReworkRate has 5 entries");
+    for (const t of qc1.topByDefectRate) {
+      assert(t.defectRatePct >= 0 && t.defectRatePct <= 100, `qc top defect ${t.operation}/${t.lineId}: defectRatePct ∈ 0..100`);
+    }
+    assert(qc1.meta.simulated === true, "qc: meta.simulated is true");
+    assert(/Simulated/i.test(qc1.meta.source), "qc: meta.source mentions Simulated");
+    assert(typeof qc1.meta.defectSource === "string" && qc1.meta.defectSource.length > 0, "qc: meta.defectSource is set");
+
+    // Determinism — content stable across two calls (only meta.generatedAt may differ).
+    const qc2 = await getJson(base + "/api/qc/defects");
+    const { generatedAt: _qg1, ...qc1Stripped } = qc1.meta;
+    const { generatedAt: _qg2, ...qc2Stripped } = qc2.meta;
+    const qcStable1 = { ...qc1, meta: qc1Stripped };
+    const qcStable2 = { ...qc2, meta: qc2Stripped };
+    assert(JSON.stringify(qcStable1) === JSON.stringify(qcStable2), "qc: content is deterministic across calls (only generatedAt may differ)");
   } finally {
     await cleanup();
   }

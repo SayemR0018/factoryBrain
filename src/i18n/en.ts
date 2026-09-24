@@ -282,7 +282,18 @@ export const en = {
     emptyCta: "Connect a source",
     edit: "Edit",
     simulated: "Simulated",
-    simulatedTip: "This feed is synthetic. Patterns are calibrated to NASA C-MAPSS, Kaggle Bosch, and UCI SECOM public datasets. A real pilot needs a hardware partner."
+    simulatedTip: "This feed is synthetic. Patterns are calibrated to NASA C-MAPSS, Kaggle Bosch, and UCI SECOM public datasets. A real pilot needs a hardware partner.",
+    groupSensors: "Floor sensors",
+    groupSensorsSubtitle: "RFID bundle scans, machine telemetry and energy meter. Simulated feeds calibrated against NASA C-MAPSS, Kaggle Bosch and UCI SECOM public datasets.",
+    groupPilot: "Pilot sources",
+    groupPilotSubtitle: "Documents, CSV / Excel and Google Sheets — used alongside the sensors. No external account needed in demo mode.",
+    groupOutOfScope: "Not for RMG pilot",
+    groupOutOfScopeSubtitle: "Social channels and commerce backends. Kept here so existing connections stay queryable, but the floor-team workflow doesn't depend on them.",
+    groupOutOfScopeToggle: "Show anyway",
+    groupOutOfScopeHide: "Hide",
+    groupOutOfScopeTag: "Not RMG pilot",
+    outOfScopeReason: "Out of scope for the RMG pilot — kept available so previously connected sources still work.",
+    calibrationNote: "Simulated — calibrated to public industrial telemetry datasets."
   },
   connect: {
     fields: {

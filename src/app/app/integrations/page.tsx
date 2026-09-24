@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { PlugZap, RefreshCw, Power, Pencil } from "lucide-react";
+import { PlugZap, RefreshCw, Power, Pencil, ChevronDown, ChevronRight, FlaskConical, RadioTower, FileText, Info } from "lucide-react";
 import { useT } from "@/lib/useT";
 import { ingestionService, isSensorSource } from "@/services/ingestion.service";
 import { Panel } from "@/components/ui/Panel";
@@ -12,11 +12,12 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { useBusinessStore } from "@/store/business.store";
-import { SOURCE_FORMS, listSourceIds, maskValue } from "@/services/ingestion-forms";
+import { SOURCE_FORMS, maskValue } from "@/services/ingestion-forms";
+import type { IngestionSourceCategory } from "@/store/business.store";
+import type { IngestionSourcePublic } from "@/services/types";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
 
 type SyncStatus = "idle" | "syncing" | "ok" | "fail";
 
@@ -30,6 +31,7 @@ export default function IntegrationsPage() {
   const [status, setStatus] = useState<Record<string, SyncStatus>>({});
   const [connectFor, setConnectFor] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
+  const [showOutOfScope, setShowOutOfScope] = useState(false);
 
   // Tick once a second so relative timestamps stay current without a noisy interval.
   useEffect(() => {
@@ -39,6 +41,10 @@ export default function IntegrationsPage() {
 
   const list = useMemo(() => ingestionService.list(), [sources, tick]);
   const connectedCount = list.filter((s) => s.status === "connected").length;
+
+  const sensorSources = useMemo(() => list.filter((s) => s.category === "sensor"), [list]);
+  const pilotSources = useMemo(() => list.filter((s) => s.category === "pilot"), [list]);
+  const outOfScopeSources = useMemo(() => list.filter((s) => s.category === "out_of_scope"), [list]);
 
   async function handleSync(id: string) {
     setStatus((s) => ({ ...s, [id]: "syncing" }));
@@ -91,96 +97,90 @@ export default function IntegrationsPage() {
           </div>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-          {list.map((s, i) => {
-            const sStatus = status[s.id] ?? "idle";
-            const connected = s.status === "connected";
-            const sym = sStatus === "syncing" ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />;
-            return (
-              <motion.div
-                key={s.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22, delay: i * 0.03 }}
-              >
-                <Panel>
-                  <div className="flex items-start gap-3">
-                    <div className="size-9 rounded-md bg-surface-2 flex items-center justify-center text-fg-primary shrink-0">
-                      <PlugZap size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <p className="text-body text-fg-primary truncate">{locale === "bn" ? s.labelBn : s.label}</p>
-                          {simulatedData && isSensorSource(s.id) && (
-                            <Tooltip content={t("integrations.simulatedTip") as string}>
-                              <span className="inline-flex items-center gap-1 mono-pill text-fg-tertiary bg-surface-2 border border-border-subtle px-1.5 py-0.5 rounded-sm shrink-0">
-                                <FlaskConical size={10} />
-                                {t("integrations.simulated")}
-                              </span>
-                            </Tooltip>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            "mono-pill border px-2 py-1 rounded-sm shrink-0",
-                            connected
-                              ? "text-[var(--risk-low)] bg-[var(--risk-low-soft)] border-[var(--risk-low-border)]"
-                              : "text-fg-tertiary bg-surface-2 border-border-subtle"
-                          )}
-                        >
-                          {connected ? t("integrations.connected") : t("integrations.available")}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-caption text-fg-tertiary">{s.objectTypes.join(" · ")}</p>
-                      <p className="mt-1 text-caption text-fg-tertiary">
-                        {s.records.toLocaleString()} {t("integrations.records")}
-                        {connected && s.lastSync && <> · {t("integrations.lastSync")} {formatRelative(s.lastSync, locale)}</>}
-                        {s.value && connected && <> · {maskValue(s.id, s.value)}</>}
-                      </p>
-                      {sStatus === "fail" && (
-                        <p className="mt-1 text-caption text-[var(--risk-high)]">{t("integrations.syncFailed")}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-end gap-2">
-                    {connected ? (
-                      <>
-                        <Tooltip content={t("integrations.disconnect") as string}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmDisconnect(s.id)}
-                            aria-label={t("integrations.disconnect") as string}
-                          >
-                            <Power size={12} />
-                          </Button>
-                        </Tooltip>
-                        <Tooltip content={t("integrations.edit") as string}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setConnectFor(s.id)}
-                            aria-label={t("integrations.edit") as string}
-                          >
-                            <Pencil size={12} /> {t("integrations.edit")}
-                          </Button>
-                        </Tooltip>
-                        <Button variant="primary" size="sm" onClick={() => handleSync(s.id)} disabled={sStatus === "syncing"}>
-                          {sym}
-                          {t("integrations.syncNow")}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="primary" size="sm" onClick={() => setConnectFor(s.id)}>
-                        {t("integrations.connect")}
-                      </Button>
-                    )}
-                  </div>
-                </Panel>
-              </motion.div>
-            );
-          })}
+        <div className="mt-6 space-y-8">
+          {/* Floor sensors — RFID, machine telemetry, energy meter. Calibrated simulated feeds. */}
+          <IntegrationGroup
+            title={t("integrations.groupSensors") as string}
+            subtitle={t("integrations.groupSensorsSubtitle") as string}
+            icon={<RadioTower size={14} />}
+            category="sensor"
+            items={sensorSources}
+            status={status}
+            simulatedData={simulatedData}
+            locale={locale as "en" | "bn"}
+            onConnect={setConnectFor}
+            onDisconnect={setConfirmDisconnect}
+            onSync={handleSync}
+            startIndex={0}
+          />
+
+          {/* Pilot sources — Documents, CSV/Excel, Google Sheets. Used alongside sensors. */}
+          <IntegrationGroup
+            title={t("integrations.groupPilot") as string}
+            subtitle={t("integrations.groupPilotSubtitle") as string}
+            icon={<FileText size={14} />}
+            category="pilot"
+            items={pilotSources}
+            status={status}
+            simulatedData={simulatedData}
+            locale={locale as "en" | "bn"}
+            onConnect={setConnectFor}
+            onDisconnect={setConfirmDisconnect}
+            onSync={handleSync}
+            startIndex={sensorSources.length}
+          />
+
+          {/* Out of scope for the RMG pilot — disclosed/demoted. Connect flows still work so
+              previously connected sources stay queryable, but the group sits below the fold. */}
+          <div
+            className="surface-2 border border-border-subtle rounded-md"
+            data-testid="integrations-out-of-scope"
+          >
+            <button
+              type="button"
+              onClick={() => setShowOutOfScope((v) => !v)}
+              aria-expanded={showOutOfScope}
+              aria-controls="integrations-out-of-scope-list"
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left press"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {showOutOfScope ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <Info size={14} className="text-fg-tertiary shrink-0" />
+                <span className="text-body text-fg-primary truncate">
+                  {t("integrations.groupOutOfScope")}
+                </span>
+                <span className="mono-pill text-fg-tertiary bg-surface border border-border-subtle px-1.5 py-0.5 rounded-sm shrink-0">
+                  {outOfScopeSources.length}
+                </span>
+              </div>
+              <span className="text-caption text-accent hover:underline shrink-0">
+                {showOutOfScope ? t("integrations.groupOutOfScopeHide") : t("integrations.groupOutOfScopeToggle")}
+              </span>
+            </button>
+            <p className="px-4 pb-3 text-caption text-fg-tertiary">
+              {t("integrations.groupOutOfScopeSubtitle")}
+            </p>
+            {showOutOfScope && (
+              <div id="integrations-out-of-scope-list" className="px-4 pb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {outOfScopeSources.map((s, i) => (
+                    <SourceCard
+                      key={s.id}
+                      source={s}
+                      index={sensorSources.length + pilotSources.length + i}
+                      sStatus={status[s.id] ?? "idle"}
+                      simulatedData={simulatedData}
+                      locale={locale as "en" | "bn"}
+                      outOfScope
+                      onConnect={setConnectFor}
+                      onDisconnect={setConfirmDisconnect}
+                      onSync={handleSync}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -209,6 +209,195 @@ export default function IntegrationsPage() {
         <p className="text-body text-fg-secondary">{t("integrations.disconnectConfirm")}</p>
       </Modal>
     </div>
+  );
+}
+
+// --- Group + Card subcomponents --------------------------------------------
+
+function IntegrationGroup({
+  title,
+  subtitle,
+  icon,
+  category,
+  items,
+  status,
+  simulatedData,
+  locale,
+  onConnect,
+  onDisconnect,
+  onSync,
+  startIndex
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  category: IngestionSourceCategory;
+  items: IngestionSourcePublic[];
+  status: Record<string, SyncStatus>;
+  simulatedData: boolean;
+  locale: "en" | "bn";
+  onConnect: (id: string) => void;
+  onDisconnect: (id: string) => void;
+  onSync: (id: string) => Promise<void>;
+  startIndex: number;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section data-testid={`integrations-group-${category}`}>
+      <header className="flex items-start gap-2 mb-3">
+        <span className="mt-1 text-fg-tertiary shrink-0">{icon}</span>
+        <div className="min-w-0">
+          <h2 className="text-title text-fg-primary">{title}</h2>
+          <p className="mt-0.5 text-caption text-fg-tertiary">{subtitle}</p>
+        </div>
+      </header>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {items.map((s, i) => (
+          <SourceCard
+            key={s.id}
+            source={s}
+            index={startIndex + i}
+            sStatus={status[s.id] ?? "idle"}
+            simulatedData={simulatedData}
+            locale={locale}
+            outOfScope={false}
+            onConnect={onConnect}
+            onDisconnect={onDisconnect}
+            onSync={onSync}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SourceCard({
+  source: s,
+  index: i,
+  sStatus,
+  simulatedData,
+  locale,
+  outOfScope,
+  onConnect,
+  onDisconnect,
+  onSync
+}: {
+  source: IngestionSourcePublic;
+  index: number;
+  sStatus: SyncStatus;
+  simulatedData: boolean;
+  locale: "en" | "bn";
+  outOfScope: boolean;
+  onConnect: (id: string) => void;
+  onDisconnect: (id: string) => void;
+  onSync: (id: string) => Promise<void>;
+}) {
+  const { t } = useT();
+  const connected = s.status === "connected";
+  const isSensor = isSensorSource(s.id);
+  const showSimulated = simulatedData && isSensor;
+  const sym = sStatus === "syncing" ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, delay: i * 0.03 }}
+      data-testid={`integration-card-${s.id}`}
+    >
+      <Panel>
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-md bg-surface-2 flex items-center justify-center text-fg-primary shrink-0">
+            <PlugZap size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="text-body text-fg-primary truncate">{locale === "bn" ? s.labelBn : s.label}</p>
+                {showSimulated && (
+                  <Tooltip content={t("integrations.simulatedTip") as string}>
+                    <span
+                      className="inline-flex items-center gap-1 mono-pill text-fg-tertiary bg-surface-2 border border-border-subtle px-1.5 py-0.5 rounded-sm shrink-0"
+                      data-testid={`integration-simulated-${s.id}`}
+                    >
+                      <FlaskConical size={10} />
+                      {t("integrations.simulated")}
+                    </span>
+                  </Tooltip>
+                )}
+                {outOfScope && (
+                  <span
+                    className="inline-flex items-center gap-1 mono-pill text-fg-tertiary bg-surface-2 border border-border-subtle px-1.5 py-0.5 rounded-sm shrink-0"
+                    data-testid={`integration-out-of-scope-${s.id}`}
+                    title={t("integrations.outOfScopeReason") as string}
+                  >
+                    <Info size={10} />
+                    {t("integrations.groupOutOfScopeTag")}
+                  </span>
+                )}
+              </div>
+              <span
+                className={cn(
+                  "mono-pill border px-2 py-1 rounded-sm shrink-0",
+                  connected
+                    ? "text-[var(--risk-low)] bg-[var(--risk-low-soft)] border-[var(--risk-low-border)]"
+                    : "text-fg-tertiary bg-surface-2 border-border-subtle"
+                )}
+              >
+                {connected ? t("integrations.connected") : t("integrations.available")}
+              </span>
+            </div>
+            <p className="mt-1 text-caption text-fg-tertiary">{s.objectTypes.join(" · ")}</p>
+            <p className="mt-1 text-caption text-fg-tertiary">
+              {s.records.toLocaleString()} {t("integrations.records")}
+              {connected && s.lastSync && <> · {t("integrations.lastSync")} {formatRelative(s.lastSync, locale)}</>}
+              {s.value && connected && <> · {maskValue(s.id, s.value)}</>}
+            </p>
+            {isSensor && (
+              <p className="mt-1 text-caption text-fg-tertiary">
+                {t("integrations.calibrationNote")}
+              </p>
+            )}
+            {sStatus === "fail" && (
+              <p className="mt-1 text-caption text-[var(--risk-high)]">{t("integrations.syncFailed")}</p>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {connected ? (
+            <>
+              <Tooltip content={t("integrations.disconnect") as string}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDisconnect(s.id)}
+                  aria-label={t("integrations.disconnect") as string}
+                >
+                  <Power size={12} />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t("integrations.edit") as string}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onConnect(s.id)}
+                  aria-label={t("integrations.edit") as string}
+                >
+                  <Pencil size={12} /> {t("integrations.edit")}
+                </Button>
+              </Tooltip>
+              <Button variant="primary" size="sm" onClick={() => void onSync(s.id)} disabled={sStatus === "syncing"}>
+                {sym}
+                {t("integrations.syncNow")}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="sm" onClick={() => onConnect(s.id)}>
+              {t("integrations.connect")}
+            </Button>
+          )}
+        </div>
+      </Panel>
+    </motion.div>
   );
 }
 

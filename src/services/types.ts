@@ -1,6 +1,6 @@
 // Shared service contracts. Same shape under mock and api adapters.
 
-import type { BusinessProfile } from "@/store/business.store";
+import type { BusinessProfile, IngestionSourceCategory } from "@/store/business.store";
 
 export type SourceStatus = "connected" | "available" | "pending";
 
@@ -12,6 +12,10 @@ export type IngestionSourcePublic = {
   status: SourceStatus;
   lastSync: string | null;
   records: number;
+  /** sensor | pilot | out_of_scope — drives the grouping on /app/integrations.
+   *  Inferred from the built-in SOURCE_CATEGORY map for sources stored
+   *  before the category field existed. */
+  category: IngestionSourceCategory;
   /** Optional user-supplied value (URL, phone, handle). */
   value?: string;
   /** Optional filename for CSV uploads. */

@@ -1,6 +1,6 @@
 import { dataset } from "./dataset";
 import type { IngestionSourcePublic } from "./types";
-import { useBusinessStore } from "@/store/business.store";
+import { useBusinessStore, SOURCE_CATEGORY } from "@/store/business.store";
 import { SOURCE_FORMS } from "./ingestion-forms";
 
 const labels: Record<string, { label: string; labelBn: string }> = {
@@ -75,6 +75,10 @@ export const ingestionService = {
   list(): IngestionSourcePublic[] {
     return useBusinessStore.getState().sources.map((s) => {
       const base = baselineRecordCount(s.id);
+      // Back-compat: persisted sources from earlier versions are missing the
+      // category field. Fall back to the built-in SOURCE_CATEGORY map so they
+      // land in the right group instead of disappearing.
+      const category = s.category ?? SOURCE_CATEGORY[s.id] ?? "pilot";
       return {
         id: s.id,
         label: labels[s.id]?.label ?? s.id,
@@ -84,6 +88,7 @@ export const ingestionService = {
         lastSync: s.lastSync,
         /** When connected, use the stored record count. Otherwise report the baseline as a "what you get" preview. */
         records: s.connected ? Math.max(s.records || 0, base) : base,
+        category,
         value: s.value,
         filename: s.filename
       };

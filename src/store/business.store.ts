@@ -17,12 +17,33 @@ export type BusinessProfile = {
   factoryName?: string;
 };
 
+export type IngestionSourceCategory = "sensor" | "pilot" | "out_of_scope";
+
+/** Built-in source → category. Used to stamp `category` onto any IngestionSource
+ *  in the store that doesn't carry it explicitly (so persisted sources from
+ *  earlier versions still render in the right group). */
+export const SOURCE_CATEGORY: Record<string, IngestionSourceCategory> = {
+  "rfid-bundles": "sensor",
+  "machine-telemetry": "sensor",
+  "energy-meter": "sensor",
+  sheets: "pilot",
+  csv: "pilot",
+  documents: "pilot",
+  whatsapp: "out_of_scope",
+  shopify: "out_of_scope",
+  facebook: "out_of_scope",
+  instagram: "out_of_scope"
+};
+
 export type IngestionSource = {
   id: string;
   connected: boolean;
   lastSync: string | null;
   objectTypes: string[];
   records: number;
+  /** Sensor | pilot | out_of_scope. Inferred from SOURCE_CATEGORY for sources
+   *  that don't carry the field explicitly (back-compat with persisted state). */
+  category?: IngestionSourceCategory;
   /** The user-entered value (sheet URL, phone, etc.) — masked when displayed. */
   value?: string;
   /** Optional filename for CSV upload. */
@@ -93,16 +114,21 @@ const defaultProfile: BusinessProfile = {
 };
 
 const defaultSources: IngestionSource[] = [
-  { id: "rfid-bundles", connected: false, lastSync: null, objectTypes: ["orders"], records: 0 },
-  { id: "machine-telemetry", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
-  { id: "energy-meter", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
-  { id: "sheets", connected: false, lastSync: null, objectTypes: ["products", "orders"], records: 0 },
-  { id: "shopify", connected: false, lastSync: null, objectTypes: ["products", "orders", "customers"], records: 0 },
-  { id: "whatsapp", connected: false, lastSync: null, objectTypes: ["conversations"], records: 0 },
-  { id: "facebook", connected: false, lastSync: null, objectTypes: ["orders", "customers"], records: 0 },
-  { id: "instagram", connected: false, lastSync: null, objectTypes: ["orders", "customers"], records: 0 },
-  { id: "csv", connected: false, lastSync: null, objectTypes: ["products", "orders", "customers", "inventory"], records: 0 },
-  { id: "documents", connected: false, lastSync: null, objectTypes: ["policies", "suppliers"], records: 0 }
+  // Sensors first — kept as the headline sources for the RMG pilot. Calibration
+  // notes surface in the Integrations UI alongside the simulated pill.
+  { id: "rfid-bundles", category: "sensor", connected: false, lastSync: null, objectTypes: ["orders"], records: 0 },
+  { id: "machine-telemetry", category: "sensor", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
+  { id: "energy-meter", category: "sensor", connected: false, lastSync: null, objectTypes: ["inventory"], records: 0 },
+  // Pilot sources — kept, but not on the same headline row as the sensors.
+  { id: "documents", category: "pilot", connected: false, lastSync: null, objectTypes: ["policies", "suppliers"], records: 0 },
+  { id: "csv", category: "pilot", connected: false, lastSync: null, objectTypes: ["products", "orders", "customers", "inventory"], records: 0 },
+  { id: "sheets", category: "pilot", connected: false, lastSync: null, objectTypes: ["products", "orders"], records: 0 },
+  // Out-of-scope for the RMG pilot — kept in the data model so existing
+  // connected sources stay queryable, but moved to a disclosed/demoted group.
+  { id: "shopify", category: "out_of_scope", connected: false, lastSync: null, objectTypes: ["products", "orders", "customers"], records: 0 },
+  { id: "whatsapp", category: "out_of_scope", connected: false, lastSync: null, objectTypes: ["conversations"], records: 0 },
+  { id: "facebook", category: "out_of_scope", connected: false, lastSync: null, objectTypes: ["orders", "customers"], records: 0 },
+  { id: "instagram", category: "out_of_scope", connected: false, lastSync: null, objectTypes: ["orders", "customers"], records: 0 }
 ];
 
 export const useBusinessStore = create<BusinessState>((set, get) => ({

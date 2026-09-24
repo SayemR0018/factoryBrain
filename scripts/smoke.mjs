@@ -294,6 +294,64 @@ async function main() {
   assert(en.includes('qc: "QC defects"'), "i18n en: nav.qc label present");
   assert(bn.includes('qc: "মান নিয়ন্ত্রণ ত্রুটি"'), "i18n bn: nav.qc label present");
 
+  // Integrations page — category grouping + sensor calibration + demoted social sources.
+  const businessStore = await read("src/store/business.store.ts");
+  assert(businessStore.includes("IngestionSourceCategory"), "store: IngestionSourceCategory type exported");
+  assert(businessStore.includes("SOURCE_CATEGORY"), "store: SOURCE_CATEGORY map exported");
+  assert(businessStore.includes('"rfid-bundles", category: "sensor"'), "store: rfid-bundles is sensor");
+  assert(businessStore.includes('"machine-telemetry", category: "sensor"'), "store: machine-telemetry is sensor");
+  assert(businessStore.includes('"energy-meter", category: "sensor"'), "store: energy-meter is sensor");
+  assert(businessStore.includes('"documents", category: "pilot"'), "store: documents is pilot");
+  assert(businessStore.includes('"csv", category: "pilot"'), "store: csv is pilot");
+  assert(businessStore.includes('"sheets", category: "pilot"'), "store: sheets is pilot");
+  assert(businessStore.includes('"shopify", category: "out_of_scope"'), "store: shopify is out_of_scope");
+  assert(businessStore.includes('"whatsapp", category: "out_of_scope"'), "store: whatsapp is out_of_scope");
+  assert(businessStore.includes('"facebook", category: "out_of_scope"'), "store: facebook is out_of_scope");
+  assert(businessStore.includes('"instagram", category: "out_of_scope"'), "store: instagram is out_of_scope");
+
+  // Sensors come before pilot sources, and pilot sources before social/commerce
+  // sources in the default ordering.
+  const sensorsIdx = businessStore.indexOf('"rfid-bundles", category: "sensor"');
+  const pilotIdx = businessStore.indexOf('"documents", category: "pilot"');
+  const oosIdx = businessStore.indexOf('"shopify", category: "out_of_scope"');
+  assert(sensorsIdx > 0 && pilotIdx > sensorsIdx && oosIdx > pilotIdx, "store: default source order is sensors → pilot → out_of_scope");
+
+  const ingestionSvc = await read("src/services/ingestion.service.ts");
+  assert(ingestionSvc.includes("SOURCE_CATEGORY"), "ingestion.service: imports SOURCE_CATEGORY for back-compat");
+  assert(ingestionSvc.includes("category ="), "ingestion.service: stamps category on every listed source");
+
+  const integrationsPage = await read("src/app/app/integrations/page.tsx");
+  assert(integrationsPage.includes('"sensor"'), "integrations page: renders the sensor group");
+  assert(integrationsPage.includes('"pilot"'), "integrations page: renders the pilot group");
+  assert(integrationsPage.includes('"out_of_scope"'), "integrations page: handles the out_of_scope group");
+  assert(integrationsPage.includes("groupSensors"), "integrations page: uses groupSensors i18n key");
+  assert(integrationsPage.includes("groupPilot"), "integrations page: uses groupPilot i18n key");
+  assert(integrationsPage.includes("groupOutOfScope"), "integrations page: uses groupOutOfScope i18n key");
+  assert(integrationsPage.includes("showOutOfScope"), "integrations page: out_of_scope is disclosed behind a toggle");
+  assert(integrationsPage.includes("integration-card-"), "integrations page: smoke-visible per-card testid");
+  assert(integrationsPage.includes("integration-simulated-"), "integrations page: keeps the Simulated pill for sensor sources");
+  assert(integrationsPage.includes("calibrationNote"), "integrations page: surfaces the calibration note on sensor cards");
+  assert(integrationsPage.includes("RFID bundle scans") || integrationsPage.includes("RFID"), "integrations page: keeps the kept sensor sources connected");
+  // Connect / disconnect flow for kept sources must still exist.
+  assert(integrationsPage.includes("ConnectModal") || integrationsPage.includes("setConnectFor"), "integrations page: Connect flow still wired for kept sources");
+  assert(integrationsPage.includes("setConfirmDisconnect") || integrationsPage.includes("handleDisconnect"), "integrations page: Disconnect flow still wired for kept sources");
+
+  // i18n additions for the category grouping.
+  for (const k of [
+    "groupSensors:",
+    "groupSensorsSubtitle:",
+    "groupPilot:",
+    "groupPilotSubtitle:",
+    "groupOutOfScope:",
+    "groupOutOfScopeSubtitle:",
+    "groupOutOfScopeToggle:",
+    "groupOutOfScopeTag:",
+    "calibrationNote:"
+  ]) {
+    assert(en.includes(k), `i18n en: has integrations.${k.replace(/:$/, "")}`);
+    assert(bn.includes(k), `i18n bn: has integrations.${k.replace(/:$/, "")}`);
+  }
+
   // LineBoardPanel — wiring + i18n keys.
   const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");
   assert(lineBoardPanel.includes('export function LineBoardPanel'), "LineBoardPanel: component exported");

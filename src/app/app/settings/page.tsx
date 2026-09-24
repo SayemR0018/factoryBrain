@@ -625,29 +625,369 @@ function AdvancedSection({ router }: { router: ReturnType<typeof useRouter> }) {
   }
 
   return (
-    <Panel title={t("settings.advanced")}>
-      <Row label={t("settings.restartTour")} hint="Replay the onboarding walkthrough">
-        <Button variant="secondary" size="sm" onClick={restartTour}>
-          <Play size={12} /> {t("tour.restart")}
-        </Button>
-      </Row>
-      <Row label={t("settings.resetDemo")} hint="Wipe everything and start over">
-        {!confirmReset ? (
-          <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
-            <Trash2 size={12} /> {t("settings.resetDemo")}
+    <>
+      <Panel title={t("settings.advanced")}>
+        <LlmPanel />
+        <Row label={t("settings.restartTour")} hint="Replay the onboarding walkthrough">
+          <Button variant="secondary" size="sm" onClick={restartTour}>
+            <Play size={12} /> {t("tour.restart")}
           </Button>
-        ) : (
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>
-              {t("common.cancel")}
+        </Row>
+        <Row label={t("settings.resetDemo")} hint="Wipe everything and start over">
+          {!confirmReset ? (
+            <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
+              <Trash2 size={12} /> {t("settings.resetDemo")}
             </Button>
-            <Button variant="danger" size="sm" onClick={doReset}>
-              {t("common.confirm")}
+          ) : (
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button variant="danger" size="sm" onClick={doReset}>
+                {t("common.confirm")}
+              </Button>
+            </div>
+          )}
+        </Row>
+      </Panel>
+    </>
+  );
+}
+
+// ---- LLM / Live Ask panel -------------------------------------------------
+//
+// Renders inside <AdvancedSection />. Talks to /api/settings/llm ONLY:
+//   - GET  → reads non-secret status (configured, provider, model, mode,
+//            persistence) and never receives the key.
+//   - POST → submits { provider, apiKey, model } or { clearKey: true }.
+//
+// The key never enters React state beyond a per-keystroke string in a local
+// controlled input that is cleared on submit. It is never stored in Zustand,
+// localStorage, cookies, or the URL. It is never prefixed with NEXT_PUBLIC_*.
+
+type LlmStatus = {
+  configured: boolean;
+  provider: string | null;
+  model: string | null;
+  mode: "demo" | "live";
+  persistence: "env.local" | "process" | "vercel_only";
+  notice?: string;
+};
+
+const PROVIDERS = [
+  { value: "openai", labelKey: "settings.llmProviderOpenai" },
+  { value: "gemini", labelKey: "settings.llmProviderGemini" },
+  { value: "anthropic", labelKey: "settings.llmProviderAnthropic" }
+] as const;
+
+const MASKED_KEY = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+
+function maskKey(): string {
+  // Returned once on each successful save so the UI can show the masked
+  // indicator. Never a function of the real key — same string every time.
+  return MASKED_KEY;
+}
+
+function LlmPanel() {
+  const { t } = useT();
+
+  // Status from the server. The key is never on this object.
+  const [status, setStatus] = useState<LlmStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // Form fields. The raw key only lives in `keyDraft` until the user clicks
+  // Save, then it is sent to the server and discarded from local state.
+  const [provider, setProvider] = useState<"openai" | "gemini" | "anthropic">("openai");
+  const [model, setModel] = useState<string>("");
+  const [keyDraft, setKeyDraft] = useState<string>("");
+  const [hasKey, setHasKey] = useState(false);
+
+  // Submit + clear state.
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function refreshStatus() {
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      const res = await fetch("/api/settings/llm", { method: "GET", cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as LlmStatus;
+      setStatus(data);
+      // Sync the form to the saved values. The key is intentionally omitted.
+      if (data.provider && ["openai", "gemini", "anthropic"].includes(data.provider)) {
+        setProvider(data.provider as "openai" | "gemini" | "anthropic");
+      }
+      setModel(data.model ?? "");
+      setHasKey(Boolean(data.configured));
+    } catch (err) {
+      setStatusError("Could not load LLM status.");
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshStatus();
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setNotice(null);
+    try {
+      const trimmedKey = keyDraft.trim();
+      const body: {
+        provider: "openai" | "gemini" | "anthropic";
+        apiKey?: string;
+        model?: string;
+      } = { provider };
+      // Only send apiKey when the user actually typed one. An empty draft
+      // is treated as "leave existing key alone" by the server contract.
+      if (trimmedKey.length > 0) body.apiKey = trimmedKey;
+      if (model.trim().length > 0) body.model = model.trim();
+
+      const res = await fetch("/api/settings/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = (await res.json()) as Partial<LlmStatus> & { notice?: string; error?: string };
+      if (!res.ok) {
+        setNotice(t("settings.llmSavedToast") + " — " + (data.error ?? "failed"));
+        return;
+      }
+      // Wipe the draft key from local memory the moment a save lands.
+      setKeyDraft("");
+      setHasKey(true);
+      setStatus((prev) => ({ ...(prev as LlmStatus), ...(data as LlmStatus) }));
+      await refreshStatus();
+      setNotice(data.notice ?? (t("settings.llmSavedToast") as string));
+    } catch {
+      setNotice("Could not reach the server.");
+    } finally {
+      setSaving(false);
+      // Auto-dismiss the notice after a few seconds.
+      setTimeout(() => setNotice(null), 4000);
+    }
+  }
+
+  async function handleClear() {
+    setClearing(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/settings/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, clearKey: true })
+      });
+      const data = (await res.json()) as Partial<LlmStatus> & { notice?: string; error?: string };
+      if (!res.ok) {
+        setNotice(t("settings.llmClearedToast") + " — " + (data.error ?? "failed"));
+        return;
+      }
+      setKeyDraft("");
+      setHasKey(false);
+      setStatus((prev) => ({ ...(prev as LlmStatus), ...(data as LlmStatus) }));
+      await refreshStatus();
+      setNotice(data.notice ?? (t("settings.llmClearedToast") as string));
+    } catch {
+      setNotice("Could not reach the server.");
+    } finally {
+      setClearing(false);
+      setConfirmClear(false);
+      setTimeout(() => setNotice(null), 4000);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border-subtle bg-surface-2/40 p-3 mb-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-body text-fg-primary">{t("settings.llmPanel")}</p>
+          <p className="mt-0.5 text-caption text-fg-tertiary">{t("settings.llmPanelBody")}</p>
+        </div>
+        <div className="shrink-0 flex items-center gap-2">
+          {status?.mode === "live" ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-canvas px-2 py-0.5 text-caption text-risk-low"
+              title="Live mode"
+            >
+              <span className="size-1.5 rounded-full bg-risk-low" />
+              {t("settings.llmLiveChip") as string}
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-canvas px-2 py-0.5 text-caption text-fg-secondary"
+              title="Demo mode"
+            >
+              <span className="size-1.5 rounded-full bg-fg-tertiary" />
+              {t("settings.llmDemoChip") as string}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <form onSubmit={handleSave} className="mt-3 space-y-3" autoComplete="off">
+        <div>
+          <label htmlFor="llm-provider" className="text-caption text-fg-secondary">
+            {t("settings.llmProvider")}
+          </label>
+          <p className="mt-0.5 text-caption text-fg-tertiary">{t("settings.llmProviderHint")}</p>
+          <select
+            id="llm-provider"
+            name="llm-provider"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as "openai" | "gemini" | "anthropic")}
+            className="mt-1 h-9 w-full rounded-md bg-surface-2 border border-border-subtle px-2 text-body text-fg-primary focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+          >
+            {PROVIDERS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {t(p.labelKey) as string}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="llm-api-key" className="text-caption text-fg-secondary">
+            {t("settings.llmApiKey")}
+          </label>
+          <p className="mt-0.5 text-caption text-fg-tertiary">{t("settings.llmApiKeyHint")}</p>
+          {/* When a key is saved we never show its content. We render a
+              masked indicator so the operator knows one exists without
+              leaking the secret anywhere in the DOM. */}
+          {hasKey && keyDraft.length === 0 ? (
+            <div className="mt-1 h-9 w-full rounded-md bg-surface-2 border border-border-subtle px-3 flex items-center justify-between">
+              <span className="text-body text-fg-primary font-mono tracking-widest">{maskKey()}</span>
+              <span className="text-caption text-risk-low">{t("settings.llmKeySaved") as string}</span>
+            </div>
+          ) : (
+            <Input
+              id="llm-api-key"
+              name="llm-api-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              placeholder={t("settings.llmApiKeyPlaceholder") as string}
+              className="mt-1 font-mono"
+            />
+          )}
+          {!hasKey && !keyDraft && (
+            <p className="mt-1 text-caption text-fg-tertiary">
+              {t("settings.llmKeyNotSetHint") as string}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="llm-model" className="text-caption text-fg-secondary">
+            {t("settings.llmModel")}
+          </label>
+          <p className="mt-0.5 text-caption text-fg-tertiary">{t("settings.llmModelHint")}</p>
+          <Input
+            id="llm-model"
+            name="llm-model"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={provider === "openai" ? "gpt-6-luna" : ""}
+            className="mt-1 font-mono"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="text-caption text-fg-tertiary min-w-0">
+            {statusLoading ? (
+              <span>…</span>
+            ) : statusError ? (
+              <span className="text-risk-high">{statusError}</span>
+            ) : (
+              <>
+                {status?.provider && (
+                  <span className="mr-3">
+                    <span className="text-fg-secondary">{t("settings.llmProvider")}: </span>
+                    <span className="text-fg-primary font-mono">{status.provider}</span>
+                  </span>
+                )}
+                {status && (
+                  <span>
+                    <span className="text-fg-secondary">{t("settings.llmProviderPersistence")}: </span>
+                    <span className="text-fg-primary">
+                      {t(
+                        status.persistence === "env.local"
+                          ? "settings.llmPersistenceEnvLocal"
+                          : status.persistence === "vercel_only"
+                          ? "settings.llmPersistenceVercel"
+                          : "settings.llmPersistenceProcess"
+                      ) as string}
+                    </span>
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {hasKey && !confirmClear && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmClear(true)}
+                disabled={saving || clearing}
+              >
+                <Trash2 size={12} /> {t("settings.llmClear")}
+              </Button>
+            )}
+            {hasKey && confirmClear && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmClear(false)}
+                  disabled={clearing}
+                >
+                  {t("settings.llmClearCancel")}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={handleClear}
+                  disabled={clearing}
+                >
+                  <Trash2 size={12} />
+                  {clearing ? t("settings.llmClearing") : t("settings.llmClearConfirmCta")}
+                </Button>
+              </div>
+            )}
+            <Button variant="primary" size="sm" type="submit" disabled={saving || clearing}>
+              <Save size={12} />
+              {saving ? t("settings.llmClearing") : t("settings.llmSave")}
             </Button>
           </div>
+        </div>
+
+        {notice && (
+          <p className="text-caption text-fg-secondary">{notice}</p>
         )}
-      </Row>
-    </Panel>
+      </form>
+
+      <details className="mt-3 group">
+        <summary className="cursor-pointer text-caption text-fg-secondary hover:text-fg-primary select-none">
+          {t("settings.llmSecurityTitle") as string}
+        </summary>
+        <p className="mt-1 text-caption text-fg-tertiary">
+          {t("settings.llmSecurityBody") as string}
+        </p>
+      </details>
+    </div>
   );
 }
 

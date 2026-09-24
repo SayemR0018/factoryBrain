@@ -48,44 +48,41 @@ export function Sidebar() {
     items: Array<{ href: string; label: string; icon: React.ComponentType<any>; badge?: number }>;
   }> = [
     {
-      label: t("sidebar.overview"),
-      items: [{ href: "/app", label: t("nav.overview"), icon: LayoutDashboard }]
-    },
-    {
-      label: t("sidebar.ask"),
-      items: [{ href: "/app/ask", label: t("nav.ask"), icon: MessageSquareText }]
-    },
-    {
-      label: t("sidebar.intelligence"),
+      // Operations — the day-to-day floor view. Overview is the home page
+      // and includes the live line board; there is no separate line-board
+      // route, so the two collapse here.
+      label: t("sidebar.operations"),
       items: [
-        { href: "/app/brain", label: t("nav.brain"), icon: Network },
-        { href: "/app/insights", label: t("nav.insights"), icon: Lightbulb, badge: insightNewCount },
-        { href: "/app/agents", label: t("nav.agents"), icon: Bot }
-      ]
-    },
-    {
-      label: t("sidebar.control"),
-      items: [
+        { href: "/app", label: t("nav.overview"), icon: LayoutDashboard },
         { href: "/app/approvals", label: t("nav.approvals"), icon: ShieldCheck, badge: approvalCount },
         { href: "/app/activity", label: t("nav.activity"), icon: Activity }
       ]
     },
     {
-      label: t("sidebar.system"),
+      // Intelligence — Q&A, graph, insights, agents, vision. Vision is
+      // listed unconditionally under this group (was previously gated by
+      // a feature flag in the business store; that flag is still respected
+      // by /app/vision's own page-level guard, which keeps the old
+      // toggle behaviour intact while always surfacing the route).
+      label: t("sidebar.intelligence"),
+      items: [
+        { href: "/app/ask", label: t("nav.ask"), icon: MessageSquareText },
+        { href: "/app/brain", label: t("nav.brain"), icon: Network },
+        { href: "/app/insights", label: t("nav.insights"), icon: Lightbulb, badge: insightNewCount },
+        { href: "/app/agents", label: t("nav.agents"), icon: Bot },
+        { href: "/app/vision", label: t("nav.vision"), icon: ScanLine }
+      ]
+    },
+    {
+      // Floor — integrations and settings. Integrations surface the
+      // connected-source count as the only live signal.
+      label: t("sidebar.floor"),
       items: [
         { href: "/app/integrations", label: t("nav.integrations"), icon: PlugZap, badge: integrationsCount ? integrationsCount : undefined },
         { href: "/app/settings", label: t("nav.settings"), icon: Settings }
       ]
     }
   ];
-
-  // Vision Repair is gated behind a feature flag (reactive — re-renders when toggled).
-  const visionEnabled = useBusinessStore((s) => s.featureFlags.visionRepair);
-  if (visionEnabled) {
-    // Park under Intelligence next to Agents — matches JUDGES.md walkthrough order.
-    const intel = groups.find((g) => g.label === t("sidebar.intelligence")) ?? groups[0];
-    intel.items.push({ href: "/app/vision", label: t("nav.vision"), icon: ScanLine });
-  }
 
   return (
     <aside className="bg-sidebar h-full w-60 shrink-0 border-r border-border-subtle flex flex-col">

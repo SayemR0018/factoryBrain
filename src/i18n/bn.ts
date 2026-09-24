@@ -20,11 +20,9 @@ export const bn: Dict = {
     vision: "ভিশন মেরামত"
   },
   sidebar: {
-    overview: "সারসংক্ষেপ",
-    ask: "জিজ্ঞাসা",
+    operations: "অপারেশন",
     intelligence: "ইন্টেলিজেন্স",
-    control: "নিয়ন্ত্রণ",
-    system: "সিস্টেম",
+    floor: "ফ্লোর",
     unread: "{n}টি বাকি"
   },
   overview: {

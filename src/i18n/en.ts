@@ -21,11 +21,9 @@ export const en = {
     vision: "Vision repair"
   },
   sidebar: {
-    overview: "OVERVIEW",
-    ask: "ASK",
+    operations: "OPERATIONS",
     intelligence: "INTELLIGENCE",
-    control: "CONTROL",
-    system: "SYSTEM",
+    floor: "FLOOR",
     unread: "{n} pending"
   },
   overview: {

@@ -5,21 +5,15 @@ import { motion } from "framer-motion";
 import {
   Building2,
   Palette,
-  Bot,
   ShieldAlert,
-  Bell,
   Database,
   Wrench,
   Save,
   Trash2,
-  Download,
-  Upload,
-  Play,
   Sun,
   Moon,
   Monitor,
-  Sparkles,
-  FlaskConical
+  Sparkles
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/lib/useT";
@@ -33,21 +27,25 @@ import { Chip } from "@/components/ui/Chip";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { formatBDT } from "@/lib/format";
+import type { Locale } from "@/i18n/registry";
 import { cn } from "@/lib/cn";
 import { goals } from "@/data/goals";
 import { agentService } from "@/services/agent.service";
 
-type SectionId = "profile" | "appearance" | "agents" | "risk" | "notifications" | "data" | "experimental" | "advanced";
+// Five curated sections. Anything that was previously under
+// Notifications, the old split Agents / Risk, or Experimental flags is
+// either moved into Agents/Risk or hidden from the UI. The feature flags
+// and simulated-data badge remain live in the store for the rest of the
+// app (Sidebar, Vision, Activity, Integrations) — they just no longer
+// take up screen real estate here.
+type SectionId = "profile" | "appearance" | "agentsRisk" | "advanced" | "dataReset";
 
 const SECTIONS: Array<{ id: SectionId; iconKey: string; labelKey: string }> = [
   { id: "profile", iconKey: "Building2", labelKey: "settings.businessProfile" },
   { id: "appearance", iconKey: "Palette", labelKey: "settings.appearance" },
-  { id: "agents", iconKey: "Bot", labelKey: "settings.autonomy" },
-  { id: "risk", iconKey: "ShieldAlert", labelKey: "settings.risk" },
-  { id: "notifications", iconKey: "Bell", labelKey: "settings.notifications" },
-  { id: "data", iconKey: "Database", labelKey: "settings.dataSources" },
-  { id: "experimental", iconKey: "FlaskConical", labelKey: "settings.experimental" },
-  { id: "advanced", iconKey: "Wrench", labelKey: "settings.advanced" }
+  { id: "agentsRisk", iconKey: "ShieldAlert", labelKey: "settings.agentsRisk" },
+  { id: "advanced", iconKey: "Wrench", labelKey: "settings.advanced" },
+  { id: "dataReset", iconKey: "Database", labelKey: "settings.dataReset" }
 ];
 
 export default function SettingsPage() {
@@ -118,12 +116,9 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {active === "profile" && <ProfileSection flash={flash} savedKey={savedKey} />}
           {active === "appearance" && <AppearanceSection flash={flash} savedKey={savedKey} />}
-          {active === "agents" && <AgentsSection />}
-          {active === "risk" && <RiskSection flash={flash} savedKey={savedKey} />}
-          {active === "notifications" && <NotificationsSection flash={flash} savedKey={savedKey} />}
-          {active === "data" && <DataSection />}
-          {active === "experimental" && <ExperimentalSection flash={flash} savedKey={savedKey} />}
-          {active === "advanced" && <AdvancedSection router={router} />}
+          {active === "agentsRisk" && <AgentsRiskSection flash={flash} savedKey={savedKey} locale={locale} />}
+          {active === "advanced" && <AdvancedSection />}
+          {active === "dataReset" && <DataResetSection router={router} />}
         </div>
       </div>
     </div>
@@ -136,18 +131,12 @@ function SectionIcon({ name }: { name: string }) {
       return <Building2 size={13} />;
     case "Palette":
       return <Palette size={13} />;
-    case "Bot":
-      return <Bot size={13} />;
     case "ShieldAlert":
       return <ShieldAlert size={13} />;
-    case "Bell":
-      return <Bell size={13} />;
     case "Database":
       return <Database size={13} />;
     case "Wrench":
       return <Wrench size={13} />;
-    case "FlaskConical":
-      return <FlaskConical size={13} />;
     default:
       return <Sparkles size={13} />;
   }
@@ -337,13 +326,38 @@ function AppearanceSection({ flash, savedKey }: { flash: (k: string) => void; sa
   );
 }
 
-function AgentsSection() {
+// ---- Agents & risk (merged) ----------------------------------------------
+// The previous split into separate Agents / Risk / Notifications tabs was
+// folded into one panel. Notifications (in-app / email / WhatsApp digest)
+// was a non-essential dial and is dropped from the UI; feature flags and
+// simulated-data controls were also dropped from the UI (they still live
+// in the store and are read by the rest of the app).
+
+function AgentsRiskSection({
+  flash,
+  savedKey,
+  locale
+}: {
+  flash: (k: string) => void;
+  savedKey: string | null;
+  locale: Locale;
+}) {
   const { t } = useT();
   const agents = useMemo(() => agentService.list(), []);
   const agentMode = useBusinessStore((s) => s.agentMode);
   const setAgentMode = useBusinessStore((s) => s.setAgentMode);
   const globalPaused = useBusinessStore((s) => s.globalPaused);
   const setGlobalPaused = useBusinessStore((s) => s.setGlobalPaused);
+
+  const thresholds = useBusinessStore((s) => s.thresholds);
+  const setThresholds = useBusinessStore((s) => s.setThresholds);
+  const approvalGate = useBusinessStore((s) => s.approvalGate);
+  const setApprovalGate = useBusinessStore((s) => s.setApprovalGate);
+  const autoApproveBelow = useBusinessStore((s) => s.autoApproveBelow);
+  const setAutoApproveBelow = useBusinessStore((s) => s.setAutoApproveBelow);
+  // Legacy local-only fallback for the inventory threshold, kept for backward compatibility.
+  const legacyThreshold = riskService.read().inventoryOrderThresholdBdt;
+  const [legacy, setLegacy] = useState(legacyThreshold);
 
   return (
     <>
@@ -394,230 +408,126 @@ function AgentsSection() {
           </div>
         </Row>
       </Panel>
-    </>
-  );
-}
 
-function RiskSection({ flash, savedKey }: { flash: (k: string) => void; savedKey: string | null }) {
-  const { t, locale } = useT();
-  const thresholds = useBusinessStore((s) => s.thresholds);
-  const setThresholds = useBusinessStore((s) => s.setThresholds);
-  const approvalGate = useBusinessStore((s) => s.approvalGate);
-  const setApprovalGate = useBusinessStore((s) => s.setApprovalGate);
-  const autoApproveBelow = useBusinessStore((s) => s.autoApproveBelow);
-  const setAutoApproveBelow = useBusinessStore((s) => s.setAutoApproveBelow);
-  // Legacy local-only fallback for the inventory threshold, kept for backward compatibility.
-  const legacyThreshold = riskService.read().inventoryOrderThresholdBdt;
-  const [legacy, setLegacy] = useState(legacyThreshold);
-
-  return (
-    <Panel title={t("settings.risk")}>
-      <Row label={t("settings.thresholdOrderValue")} hint="Orders above this need approval">
-        <Input
-          type="number"
-          value={thresholds.orderValueBdt}
-          onChange={(e) => setThresholds({ orderValueBdt: Number(e.target.value) || 0 })}
-          onBlur={() => flash("risk")}
-          className="w-32 text-right"
-        />
-      </Row>
-      <Row label={t("settings.thresholdDiscount")} hint="Discounts above this % need approval">
-        <Input
-          type="number"
-          value={thresholds.discountPct}
-          onChange={(e) => setThresholds({ discountPct: Number(e.target.value) || 0 })}
-          onBlur={() => flash("risk")}
-          className="w-24 text-right"
-        />
-      </Row>
-      <Row label={t("settings.thresholdInventorySpend")} hint="Restock purchases above this need approval">
-        <Input
-          type="number"
-          value={thresholds.inventorySpendBdt}
-          onChange={(e) => setThresholds({ inventorySpendBdt: Number(e.target.value) || 0 })}
-          onBlur={() => flash("risk")}
-          className="w-32 text-right"
-        />
-      </Row>
-      <Row label={t("settings.thresholdMessageVolume")} hint="Outbound message batches above this need approval">
-        <Input
-          type="number"
-          value={thresholds.messageVolume}
-          onChange={(e) => setThresholds({ messageVolume: Number(e.target.value) || 0 })}
-          onBlur={() => flash("risk")}
-          className="w-24 text-right"
-        />
-      </Row>
-      <Row label={t("settings.inventoryOrderThreshold")} hint="Inventory Agent auto-suggests below this; approval above">
-        <div className="flex items-center gap-2">
+      <Panel className="mt-4" title={t("settings.risk")}>
+        <Row label={t("settings.thresholdOrderValue")} hint="Orders above this need approval">
           <Input
             type="number"
-            value={legacy}
-            onChange={(e) => setLegacy(Number(e.target.value))}
+            value={thresholds.orderValueBdt}
+            onChange={(e) => setThresholds({ orderValueBdt: Number(e.target.value) || 0 })}
+            onBlur={() => flash("risk")}
             className="w-32 text-right"
           />
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              riskService.update({ inventoryOrderThresholdBdt: legacy || 25000 });
-              flash("risk");
-            }}
-          >
-            <Save size={12} /> {t("settings.save")}
-          </Button>
-        </div>
-        <p className="mt-1 text-caption text-fg-tertiary">
-          Current: {formatBDT(legacy, locale)}
-        </p>
-      </Row>
-      <Row label={t("settings.approvalGate")} hint="Which risk tiers need approval">
-        <div className="inline-flex rounded-md border border-border-subtle bg-surface-2 p-0.5">
-          {(["low", "medium", "high"] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              aria-pressed={approvalGate[r]}
-              onClick={() => { setApprovalGate({ [r]: !approvalGate[r] }); flash("risk"); }}
-              className={cn(
-                "h-8 px-3 text-caption rounded transition-colors",
-                approvalGate[r] ? "bg-[var(--btn-primary-bg)] text-[var(--btn-primary-fg)]" : "text-fg-secondary hover:text-fg-primary"
-              )}
-            >
-              {t(`risk.${r}`) as string}
-            </button>
-          ))}
-        </div>
-      </Row>
-      <Row label={t("settings.autoApproveBelow")} hint="Skip approval under this tier">
-        <select
-          value={autoApproveBelow}
-          onChange={(e) => { setAutoApproveBelow(e.target.value as any); flash("risk"); }}
-          className="h-9 rounded-md bg-surface-2 border border-border-subtle px-2 text-caption text-fg-primary"
-        >
-          <option value="never">Never</option>
-          <option value="low">{t("risk.low") as string}</option>
-          <option value="medium">{t("risk.medium") as string}</option>
-          <option value="high">{t("risk.high") as string}</option>
-        </select>
-      </Row>
-      <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="risk" /></div>
-    </Panel>
-  );
-}
-
-function NotificationsSection({ flash, savedKey }: { flash: (k: string) => void; savedKey: string | null }) {
-  const { t } = useT();
-  const notifications = useBusinessStore((s) => s.notifications);
-  const setNotifications = useBusinessStore((s) => s.setNotifications);
-
-  return (
-    <Panel title={t("settings.notifications")}>
-      <Row label={t("settings.channelInApp")} hint="Show inside the dashboard">
-        <Toggle
-          checked={notifications.inApp}
-          onChange={(v) => { setNotifications({ inApp: v }); flash("notifications"); }}
-        />
-      </Row>
-      <Row label={t("settings.channelEmail")} hint="Daily digest to your inbox">
-        <Toggle
-          checked={notifications.email}
-          onChange={(v) => { setNotifications({ email: v }); flash("notifications"); }}
-        />
-      </Row>
-      <Row label={t("settings.channelWhatsapp")} hint="Approval asks via WhatsApp">
-        <Toggle
-          checked={notifications.whatsapp}
-          onChange={(v) => { setNotifications({ whatsapp: v }); flash("notifications"); }}
-        />
-      </Row>
-      <Row label={t("settings.digestTime")} hint="When the daily summary runs">
-        <Input
-          type="time"
-          value={notifications.digestTime}
-          onChange={(e) => setNotifications({ digestTime: e.target.value })}
-          onBlur={() => flash("notifications")}
-          className="w-32"
-        />
-      </Row>
-      <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="notifications" /></div>
-    </Panel>
-  );
-}
-
-function DataSection() {
-  const { t } = useT();
-  const router = useRouter();
-  const exportConfig = useBusinessStore((s) => s.exportConfig);
-  const importConfig = useBusinessStore((s) => s.importConfig);
-  const [importText, setImportText] = useState("");
-  const [importMsg, setImportMsg] = useState<string | null>(null);
-
-  function doExport() {
-    const blob = new Blob([exportConfig()], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bunonbrain-config.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function doImport() {
-    const r = importConfig(importText);
-    setImportMsg(r.ok ? "Imported" : `Import failed: ${r.error ?? "unknown"}`);
-    setImportText("");
-    setTimeout(() => setImportMsg(null), 2400);
-  }
-
-  return (
-    <>
-      <Panel title={t("settings.dataSources")} subtitle={t("settings.dataSourcesBody")}>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-body text-fg-primary">Integrations</p>
-          <Button variant="secondary" size="sm" onClick={() => router.push("/app/integrations")}>
-            {t("settings.openIntegrations")}
-          </Button>
-        </div>
-      </Panel>
-
-      <Panel className="mt-4" title={t("settings.advanced")}>
-        <Row label={t("settings.exportConfig")} hint="Download a JSON snapshot of your settings">
-          <Button variant="secondary" size="sm" onClick={doExport}>
-            <Download size={12} /> JSON
-          </Button>
         </Row>
-        <Row label={t("settings.importConfig")} hint="Paste a JSON snapshot to restore">
-          <div className="space-y-2">
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              placeholder='{ "profile": {...}, "thresholds": {...} }'
-              className="min-h-24 w-full rounded-md bg-surface-2 border border-border-subtle px-3 py-2 text-caption text-fg-primary font-mono focus:outline-none focus:border-border-strong"
+        <Row label={t("settings.thresholdDiscount")} hint="Discounts above this % need approval">
+          <Input
+            type="number"
+            value={thresholds.discountPct}
+            onChange={(e) => setThresholds({ discountPct: Number(e.target.value) || 0 })}
+            onBlur={() => flash("risk")}
+            className="w-24 text-right"
+          />
+        </Row>
+        <Row label={t("settings.thresholdInventorySpend")} hint="Restock purchases above this need approval">
+          <Input
+            type="number"
+            value={thresholds.inventorySpendBdt}
+            onChange={(e) => setThresholds({ inventorySpendBdt: Number(e.target.value) || 0 })}
+            onBlur={() => flash("risk")}
+            className="w-32 text-right"
+          />
+        </Row>
+        <Row label={t("settings.thresholdMessageVolume")} hint="Outbound message batches above this need approval">
+          <Input
+            type="number"
+            value={thresholds.messageVolume}
+            onChange={(e) => setThresholds({ messageVolume: Number(e.target.value) || 0 })}
+            onBlur={() => flash("risk")}
+            className="w-24 text-right"
+          />
+        </Row>
+        <Row label={t("settings.inventoryOrderThreshold")} hint="Inventory Agent auto-suggests below this; approval above">
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              value={legacy}
+              onChange={(e) => setLegacy(Number(e.target.value))}
+              className="w-32 text-right"
             />
-            <div className="flex items-center justify-end gap-2">
-              {importMsg && <span className="text-caption text-fg-secondary">{importMsg}</span>}
-              <Button variant="primary" size="sm" disabled={!importText.trim()} onClick={doImport}>
-                <Upload size={12} /> Import
-              </Button>
-            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                riskService.update({ inventoryOrderThresholdBdt: legacy || 25000 });
+                flash("risk");
+              }}
+            >
+              <Save size={12} /> {t("settings.save")}
+            </Button>
+          </div>
+          <p className="mt-1 text-caption text-fg-tertiary">
+            Current: {formatBDT(legacy, locale)}
+          </p>
+        </Row>
+        <Row label={t("settings.approvalGate")} hint="Which risk tiers need approval">
+          <div className="inline-flex rounded-md border border-border-subtle bg-surface-2 p-0.5">
+            {(["low", "medium", "high"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={approvalGate[r]}
+                onClick={() => { setApprovalGate({ [r]: !approvalGate[r] }); flash("risk"); }}
+                className={cn(
+                  "h-8 px-3 text-caption rounded transition-colors",
+                  approvalGate[r] ? "bg-[var(--btn-primary-bg)] text-[var(--btn-primary-fg)]" : "text-fg-secondary hover:text-fg-primary"
+                )}
+              >
+                {t(`risk.${r}`) as string}
+              </button>
+            ))}
           </div>
         </Row>
+        <Row label={t("settings.autoApproveBelow")} hint="Skip approval under this tier">
+          <select
+            value={autoApproveBelow}
+            onChange={(e) => { setAutoApproveBelow(e.target.value as any); flash("risk"); }}
+            className="h-9 rounded-md bg-surface-2 border border-border-subtle px-2 text-caption text-fg-primary"
+          >
+            <option value="never">Never</option>
+            <option value="low">{t("risk.low") as string}</option>
+            <option value="medium">{t("risk.medium") as string}</option>
+            <option value="high">{t("risk.high") as string}</option>
+          </select>
+        </Row>
+        <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="risk" /></div>
       </Panel>
     </>
   );
 }
 
-function AdvancedSection({ router }: { router: ReturnType<typeof useRouter> }) {
+// ---- Advanced (LLM panel only) -------------------------------------------
+// Earlier Advanced had a "Restart tour" row and a "Reset demo" row. Both
+// were non-essential dials; restart tour is still triggerable via the
+// command palette and Reset demo lives under Data reset. The LLM panel
+// is the only thing kept here.
+
+function AdvancedSection() {
+  return (
+    <Panel title="Advanced">
+      <LlmPanel />
+    </Panel>
+  );
+}
+
+// ---- Data reset ----------------------------------------------------------
+// Single destructive action. Honest copy about what gets wiped (Zustand
+// profile + thresholds + integrations + theme + key draft; .env.local
+// only via the LLM Advanced panel — see that tab).
+
+function DataResetSection({ router }: { router: ReturnType<typeof useRouter> }) {
   const { t } = useT();
   const resetDemo = useAppStore((s) => s.resetDemo);
   const [confirmReset, setConfirmReset] = useState(false);
-
-  function restartTour() {
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("bunonbrain:restart-tour"));
-    }
-  }
 
   function doReset() {
     resetDemo();
@@ -625,32 +535,27 @@ function AdvancedSection({ router }: { router: ReturnType<typeof useRouter> }) {
   }
 
   return (
-    <>
-      <Panel title={t("settings.advanced")}>
-        <LlmPanel />
-        <Row label={t("settings.restartTour")} hint="Replay the onboarding walkthrough">
-          <Button variant="secondary" size="sm" onClick={restartTour}>
-            <Play size={12} /> {t("tour.restart")}
+    <Panel title={t("settings.dataReset")} subtitle={t("settings.dataResetBody")}>
+      <Row
+        label={t("settings.resetDemo")}
+        hint={t("settings.resetDemoHint")}
+      >
+        {!confirmReset ? (
+          <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
+            <Trash2 size={12} /> {t("settings.resetDemo")}
           </Button>
-        </Row>
-        <Row label={t("settings.resetDemo")} hint="Wipe everything and start over">
-          {!confirmReset ? (
-            <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
-              <Trash2 size={12} /> {t("settings.resetDemo")}
+        ) : (
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>
+              {t("common.cancel")}
             </Button>
-          ) : (
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>
-                {t("common.cancel")}
-              </Button>
-              <Button variant="danger" size="sm" onClick={doReset}>
-                {t("common.confirm")}
-              </Button>
-            </div>
-          )}
-        </Row>
-      </Panel>
-    </>
+            <Button variant="danger" size="sm" onClick={doReset}>
+              {t("common.confirm")}
+            </Button>
+          </div>
+        )}
+      </Row>
+    </Panel>
   );
 }
 
@@ -988,64 +893,5 @@ function LlmPanel() {
         </p>
       </details>
     </div>
-  );
-}
-
-function ExperimentalSection({ flash, savedKey }: { flash: (k: string) => void; savedKey: string | null }) {
-  const { t } = useT();
-  const simulatedData = useBusinessStore((s) => s.simulatedData);
-  const setSimulatedData = useBusinessStore((s) => s.setSimulatedData);
-  const featureFlags = useBusinessStore((s) => s.featureFlags);
-  const setFeatureFlag = useBusinessStore((s) => s.setFeatureFlag);
-
-  return (
-    <>
-      <Panel title={t("settings.experimental") as string}>
-        <Row label={t("settings.simulatedData") as string} hint="Add a visible chip to every sensor source row so it's clear the data is synthetic, calibrated against public datasets.">
-          <Toggle
-            checked={simulatedData}
-            onChange={(v) => { setSimulatedData(v); flash("experimental"); }}
-          />
-        </Row>
-      </Panel>
-
-      <Panel className="mt-4" title="Feature flags">
-        <Row label={t("settings.feature.visionRepair") as string} hint={t("settings.featureBody.visionRepair") as string}>
-          <Toggle
-            checked={featureFlags.visionRepair}
-            onChange={(v) => { setFeatureFlag("visionRepair", v); flash("experimental"); }}
-          />
-        </Row>
-        <Row label={t("settings.feature.whatsappAlert") as string} hint={t("settings.featureBody.whatsappAlert") as string}>
-          <Toggle
-            checked={featureFlags.whatsappAlert}
-            onChange={(v) => { setFeatureFlag("whatsappAlert", v); flash("experimental"); }}
-          />
-        </Row>
-        <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="experimental" /></div>
-      </Panel>
-    </>
-  );
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-6 w-11 rounded-full transition-colors",
-        checked ? "bg-[var(--btn-primary-bg)]" : "bg-surface-2 border border-border-subtle"
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-5 rounded-full transition-transform",
-          checked ? "translate-x-5 bg-[var(--btn-primary-fg)]" : "translate-x-0.5 bg-fg-secondary"
-        )}
-      />
-    </button>
   );
 }

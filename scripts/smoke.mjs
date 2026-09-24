@@ -85,7 +85,10 @@ async function main() {
     "src/app/api/floor-alerts/route.ts",
     "src/app/api/floor-alerts/[id]/route.ts",
     "src/components/activity/FloorAlertsPanel.tsx",
-    "src/app/api/settings/llm/route.ts"
+    "src/app/api/settings/llm/route.ts",
+    "src/services/lineBoard.server.ts",
+    "src/app/api/line-board/route.ts",
+    "src/app/api/line-board/refresh/route.ts"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -144,7 +147,21 @@ async function main() {
   const agentRun = await read("src/app/api/agents/[agentId]/run/route.ts");
   assert(agentRun.includes("persistAgentRun"), "agents/run persists via persistAgentRun");
 
-  // 7. Brand naming wired through i18n + layout metadata.
+  // 7. Line-board route — file-shape contract (improve batch).
+  const lineBoard = await read("src/services/lineBoard.server.ts");
+  assert(lineBoard.includes("LineBoardRowSchema"), "lineBoard: Zod schema exported");
+  assert(lineBoard.includes("LINE_BOARD_SIMULATED_LABEL"), "lineBoard: simulated label exported");
+  assert(lineBoard.includes("buildLineBoard"), "lineBoard: buildLineBoard exported");
+  assert(lineBoard.includes("BottleneckEnum"), "lineBoard: bottleneck enum defined");
+  const lineBoardRoute = await read("src/app/api/line-board/route.ts");
+  assert(lineBoardRoute.includes('export async function GET'), "line-board: GET handler present");
+  assert(lineBoardRoute.includes("buildLineBoard"), "line-board: uses buildLineBoard");
+  const lineBoardRefresh = await read("src/app/api/line-board/refresh/route.ts");
+  assert(lineBoardRefresh.includes('export async function POST'), "line-board/refresh: POST handler present");
+  assert(lineBoardRefresh.includes("advanceSim"), "line-board/refresh: advances sim before reading");
+  assert(lineBoardRefresh.includes("buildLineBoard"), "line-board/refresh: returns buildLineBoard payload");
+
+  // 8. Brand naming wired through i18n + layout metadata.
   assert(en.includes('name: "BunonBrain"'), "en: app.name is BunonBrain");
   const layout = await read("src/app/layout.tsx");
   assert(layout.includes("BunonBrain"), "layout metadata mentions BunonBrain");
@@ -162,7 +179,7 @@ async function main() {
   const agentsPage = await read("src/app/app/agents/page.tsx");
   assert(agentsPage.includes("agents-run-banner"), "agents shows post-run banner");
 
-  // 8. LLM settings route — file-shape contract.
+  // 9. LLM settings route — file-shape contract.
   // ---------------------------------------------------------------------
   // Static checks against the route source so they always run, even when
   // there's no live server. The runtime check below boots one.
@@ -187,7 +204,7 @@ async function main() {
   assert(/\.env\.local/.test(gitignore), ".gitignore lists .env.local");
   assert(/\.env\*\.local/.test(gitignore), ".gitignore lists .env*.local");
 
-  // 9. LLM settings route — runtime contract.
+  // 10. LLM settings route — runtime contract.
   // ---------------------------------------------------------------------
   // Boot `next start` against the build dir, hit GET to confirm the
   // response shape never carries an apiKey or LLM_API_KEY string, POST a
@@ -282,6 +299,39 @@ async function runSettingsLlmRuntimeCheck() {
     assert(cleared.configured === false, "GET after clearKey reports configured: false");
     assert(cleared.mode === "demo", "GET after clearKey reports mode: demo");
     assertNoSecret(cleared, FAKE_KEY, "GET (after clear)");
+
+    // Line-board (improve batch) — runtime contract against the same server.
+    const board = await getJson(base + "/api/line-board");
+    assert(board && Array.isArray(board.rows), "line-board: rows is an array");
+    assert(board.rows.length === 6, "line-board: returns 6 rows (line-1..line-6)");
+    assert(board.meta && board.meta.simulated === true, "line-board: meta.simulated is true");
+    assert(typeof board.meta.source === "string" && /Simulated/.test(board.meta.source), "line-board: meta.source mentions Simulated");
+    assert(typeof board.meta.tick === "number" && board.meta.tick >= 0, "line-board: meta.tick is a non-negative number");
+    for (const r of board.rows) {
+      for (const k of ["lineId", "name", "efficiencyPct", "sahTarget", "sahActual", "wipBundles", "bottleneck", "nptMinutes", "updatedAt"]) {
+        assert(r[k] !== undefined, `line-board row ${r.lineId || "?"}: has ${k}`);
+      }
+      assert(["green", "amber", "red"].includes(r.bottleneck), `line-board row ${r.lineId}: bottleneck ∈ green/amber/red`);
+      assert(r.efficiencyPct >= 0 && r.efficiencyPct <= 100, `line-board row ${r.lineId}: efficiencyPct in 0..100`);
+      assert(Number.isInteger(r.sahTarget) && r.sahTarget >= 0 && r.sahTarget <= 100, `line-board row ${r.lineId}: sahTarget is integer 0..100`);
+      assert(Number.isInteger(r.wipBundles) && r.wipBundles >= 0, `line-board row ${r.lineId}: wipBundles is integer ≥ 0`);
+      assert(Number.isInteger(r.nptMinutes) && r.nptMinutes >= 0, `line-board row ${r.lineId}: nptMinutes is integer ≥ 0`);
+    }
+
+    // Refresh should advance tick and return a fresh board.
+    const tickBefore = board.meta.tick;
+    const refreshRes = await fetch(base + "/api/line-board/refresh", { method: "POST", headers });
+    assert(refreshRes.status === 200, "POST /api/line-board/refresh returned 200");
+    const refreshed = await refreshRes.json();
+    assert(refreshed.meta.tick > tickBefore, `line-board/refresh: tick advances (${tickBefore} → ${refreshed.meta.tick})`);
+    assert(refreshed.meta.simulated === true, "line-board/refresh: meta.simulated is true");
+    assert(refreshed.rows.length === 6, "line-board/refresh: still 6 rows");
+
+    // Invalid body returns 400.
+    const badRes = await fetch(base + "/api/line-board/refresh", {
+      method: "POST", headers, body: JSON.stringify({ tick: "nope" })
+    });
+    assert(badRes.status === 400, "POST /api/line-board/refresh with bad body returns 400");
   } finally {
     await cleanup();
   }

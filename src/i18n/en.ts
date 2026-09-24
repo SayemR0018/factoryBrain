@@ -414,11 +414,17 @@ export const en = {
     welcome: {
       eyebrow: "BUNONBRAIN",
       headline: "BunonBrain reads your BD RMG floor, then assembles the agents that run it.",
-      cta: "Start"
+      cta: "Start",
+      ctaSkip: "Enter demo",
+      ctaSeed: "Tell us about your factory",
+      tail: "The demo plant is loaded with simulated data. Skip to /app now, or seed a profile first. RFID, machine telemetry, energy and Documents are optional later under Integrations."
     },
     profile: {
       title: "Tell us about your factory",
-      subtitle: "These answers seed BunonBrain for the demo plant and come back to you by name.",
+      subtitle: "These answers seed BunonBrain for the demo plant and come back to you by name. Skip to enter the demo immediately — you can change everything later in Settings.",
+      back: "Back",
+      skip: "Skip — enter demo",
+      tail: "No data leaves your browser. RFID, machine telemetry, energy and Documents are optional and live under /app/integrations.",
       industry: "Industry",
       industryPlaceholder: "e.g. RMG, knit, woven, denim",
       whatYouSell: "What do you produce?",

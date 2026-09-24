@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useBusinessStore } from "@/store/business.store";
 import { useT } from "@/lib/useT";
 import { tArray } from "@/i18n/registry";
@@ -31,7 +31,16 @@ export default function ProfilePage() {
 
   function next() {
     setProfile({ industry, whatYouSell: what, customers: who, goals });
-    router.push("/onboarding/connect");
+    // Onboarding is intentionally short: after the profile seed we go
+    // straight to the app. RFID / machine telemetry / energy / Documents
+    // are optional and live under Integrations.
+    router.push("/app");
+  }
+
+  function skipToApp() {
+    // Persist whatever is filled in, then enter the app.
+    setProfile({ industry, whatYouSell: what, customers: who, goals });
+    router.push("/app");
   }
 
   const canContinue = industry.length > 0 && what.length > 0 && who.length > 0 && goals.length > 0;
@@ -39,7 +48,7 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 md:py-16">
       <Link href="/onboarding/welcome" className="inline-flex items-center gap-1 text-caption text-fg-tertiary hover:text-fg-primary mb-8">
-        <ArrowLeft size={12} /> Back
+        {t("onboarding.profile.back")}
       </Link>
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -99,11 +108,18 @@ export default function ProfilePage() {
         </Field>
       </div>
 
-      <div className="mt-10 flex items-center justify-end">
-        <Button variant="primary" size="lg" onClick={next} disabled={!canContinue}>
-          {t("onboarding.profile.cta")} <ArrowRight size={14} />
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
+        <Button variant="ghost" size="md" onClick={skipToApp}>
+          {t("onboarding.profile.skip")}
+        </Button>
+        <Button variant="primary" size="lg" onClick={next} disabled={!canContinue} iconRight={<ArrowRight size={14} />}>
+          {t("onboarding.profile.cta")}
         </Button>
       </div>
+
+      <p className="mt-4 text-caption text-fg-tertiary max-w-md">
+        {t("onboarding.profile.tail")}
+      </p>
     </div>
   );
 }

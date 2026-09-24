@@ -2,8 +2,9 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { useT } from "@/lib/useT";
+import { Button } from "@/components/ui/Button";
 import { BrandMark } from "@/components/brand/BrandMark";
 
 export default function WelcomePage() {
@@ -27,11 +28,31 @@ export default function WelcomePage() {
         <h1 className="mt-6 text-[36px] md:text-[52px] leading-[42px] md:leading-[60px] font-semibold tracking-tight">
           {t("onboarding.welcome.headline")}
         </h1>
-        <Link href="/onboarding/profile" className="inline-block mt-10">
-          <button className="h-12 px-7 rounded-md bg-[var(--btn-primary-bg)] text-[var(--btn-primary-fg)] border border-[var(--btn-primary-border)] hover:bg-[var(--btn-primary-bg-hover)] transition-colors inline-flex items-center gap-2 font-medium">
-            {t("onboarding.welcome.cta")} <ArrowRight size={16} />
-          </button>
-        </Link>
+
+        {/* Demo-simulated honesty chip */}
+        <p className="mt-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface/60 px-3 py-1.5 backdrop-blur text-caption text-fg-secondary">
+          <span className="size-1.5 rounded-full bg-fg-tertiary" />
+          {t("landing.badge")}
+        </p>
+
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          {/* 1-click path → /app. This is the default for judges / demo. */}
+          <Link href="/app">
+            <Button variant="primary" size="lg" iconRight={<ArrowRight size={16} />}>
+              {t("onboarding.welcome.ctaSkip")}
+            </Button>
+          </Link>
+          {/* Optional 1-extra-step path for the operator who wants to seed their profile. */}
+          <Link href="/onboarding/profile">
+            <Button variant="secondary" size="lg" iconLeft={<Sparkles size={14} />}>
+              {t("onboarding.welcome.ctaSeed")}
+            </Button>
+          </Link>
+        </div>
+
+        <p className="mt-6 text-caption text-fg-tertiary max-w-md mx-auto">
+          {t("onboarding.welcome.tail")}
+        </p>
       </motion.div>
     </div>
   );

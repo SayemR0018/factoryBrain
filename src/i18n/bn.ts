@@ -7,6 +7,9 @@ export const bn: Dict = {
     factoryProfile: "ডেমো কারখানা — মাঝারি মাপের বিডি আরএমজি",
     simulatedBadge: "সিমুলেটেড ডেটা"
   },
+  brief: {
+    fallbackNoRecs: "নতুন কোনো সুপারিশ নেই।"
+  },
   nav: {
     overview: "সারসংক্ষেপ",
     ask: "বুননব্রেইনকে জিজ্ঞাসা করুন",

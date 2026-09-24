@@ -8,6 +8,9 @@ export const en = {
     factoryProfile: "Demo plant — mid-tier BD RMG",
     simulatedBadge: "Simulated data"
   },
+  brief: {
+    fallbackNoRecs: "No new recommendations."
+  },
   nav: {
     overview: "Overview",
     ask: "Ask BunonBrain",

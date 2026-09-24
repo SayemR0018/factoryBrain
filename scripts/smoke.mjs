@@ -89,7 +89,9 @@ async function main() {
     "src/services/lineBoard.server.ts",
     "src/app/api/line-board/route.ts",
     "src/app/api/line-board/refresh/route.ts",
-    "src/components/overview/LineBoardPanel.tsx"
+    "src/components/overview/LineBoardPanel.tsx",
+    "src/services/brief.server.ts",
+    "src/app/api/brief/morning/route.ts"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -161,6 +163,22 @@ async function main() {
   assert(lineBoardRefresh.includes('export async function POST'), "line-board/refresh: POST handler present");
   assert(lineBoardRefresh.includes("advanceSim"), "line-board/refresh: advances sim before reading");
   assert(lineBoardRefresh.includes("buildLineBoard"), "line-board/refresh: returns buildLineBoard payload");
+
+  // Brief module — file-shape contract.
+  const brief = await read("src/services/brief.server.ts");
+  assert(brief.includes("BriefResponseSchema"), "brief: Zod schema exported");
+  assert(brief.includes("buildMorningBrief"), "brief: buildMorningBrief exported");
+  assert(brief.includes("BRIEF_SIMULATED_LABEL"), "brief: simulated label exported");
+  assert(brief.includes("FUTURE_LLM_HOOK"), "brief: LLM-future placeholder comment present");
+  assert(brief.includes(".strict()"), "brief: response schema is Zod-strict");
+  const briefRoute = await read("src/app/api/brief/morning/route.ts");
+  assert(briefRoute.includes('export async function GET'), "brief/morning: GET handler present");
+  assert(briefRoute.includes("buildMorningBrief"), "brief/morning: uses buildMorningBrief");
+  assert(briefRoute.includes('runtime = "nodejs"'), "brief/morning: runtime = nodejs");
+  assert(briefRoute.includes('dynamic = "force-dynamic"'), "brief/morning: dynamic = force-dynamic");
+  assert(briefRoute.includes("Cache-Control"), "brief/morning: no-store cache header");
+  assert(en.includes("brief:") && en.includes("fallbackNoRecs:"), "i18n en: brief namespace + fallbackNoRecs present");
+  assert(bn.includes("brief:") && bn.includes("fallbackNoRecs:"), "i18n bn: brief namespace + fallbackNoRecs present");
 
   // LineBoardPanel — wiring + i18n keys.
   const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");
@@ -365,6 +383,50 @@ async function runSettingsLlmRuntimeCheck() {
       method: "POST", headers, body: JSON.stringify({ tick: "nope" })
     });
     assert(badRes.status === 400, "POST /api/line-board/refresh with bad body returns 400");
+
+    // Brief — runtime contract + determinism (same inputs → identical JSON).
+    // Give Next a generous grace period to compile the freshly-added route.
+    let brief1 = null;
+    let lastStatus = 0;
+    const briefDeadline = Date.now() + 30_000;
+    while (Date.now() < briefDeadline) {
+      try {
+        const r = await fetch(base + "/api/brief/morning", { cache: "no-store" });
+        lastStatus = r.status;
+        if (r.status === 200) {
+          brief1 = await r.json();
+          break;
+        }
+        // Drain the body so the connection is reusable, but don't parse it.
+        try { await r.text(); } catch {}
+      } catch {}
+      await new Promise((r2) => setTimeout(r2, 500));
+    }
+    assert(brief1 !== null, `brief: GET /api/brief/morning returned 200 within grace period (last status ${lastStatus})`);
+    assert(typeof brief1.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(brief1.date), "brief: date is YYYY-MM-DD");
+    assert(Array.isArray(brief1.bulletsEn) && brief1.bulletsEn.length >= 1, "brief: bulletsEn is a non-empty array");
+    assert(Array.isArray(brief1.bulletsBn) && brief1.bulletsBn.length >= 1, "brief: bulletsBn is a non-empty array");
+    assert(brief1.bulletsEn.length === brief1.bulletsBn.length, "brief: bulletsEn and bulletsBn have same length");
+    for (const s of brief1.bulletsEn) assert(typeof s === "string" && s.length > 0, "brief: every bulletsEn entry is a non-empty string");
+    for (const s of brief1.bulletsBn) assert(typeof s === "string" && s.length > 0, "brief: every bulletsBn entry is a non-empty string");
+    assert(Number.isInteger(brief1.riskCount) && brief1.riskCount >= 0, "brief: riskCount is a non-negative integer");
+    assert(Number.isInteger(brief1.pendingApprovals) && brief1.pendingApprovals >= 0, "brief: pendingApprovals is a non-negative integer");
+    if (brief1.topBottleneckLineId !== undefined) {
+      assert(typeof brief1.topBottleneckLineId === "string" && /^line-\d+$/.test(brief1.topBottleneckLineId), "brief: topBottleneckLineId is a line id");
+    }
+    assert(brief1.meta && brief1.meta.simulated === true, "brief: meta.simulated is true");
+    assert(typeof brief1.meta.source === "string" && /Simulated/.test(brief1.meta.source), "brief: meta.source mentions Simulated");
+    assert(Number.isInteger(brief1.meta.tick) && brief1.meta.tick >= 0, "brief: meta.tick is a non-negative integer");
+    assert(typeof brief1.meta.generatedAt === "string" && brief1.meta.generatedAt.length > 0, "brief: meta.generatedAt is set");
+
+    // Determinism — two consecutive GETs return identical content (only
+    // meta.generatedAt is allowed to differ; bullets/insights/counts are stable).
+    const brief2 = await getJson(base + "/api/brief/morning");
+    const { generatedAt: _g1, ...brief1Stripped } = brief1.meta;
+    const { generatedAt: _g2, ...brief2Stripped } = brief2.meta;
+    const stable1 = { ...brief1, meta: brief1Stripped };
+    const stable2 = { ...brief2, meta: brief2Stripped };
+    assert(JSON.stringify(stable1) === JSON.stringify(stable2), "brief: content is deterministic across calls (only generatedAt may differ)");
   } finally {
     await cleanup();
   }

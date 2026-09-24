@@ -12,9 +12,11 @@ import { useBusinessStore } from "@/store/business.store";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { RiskBadge } from "@/components/ui/RiskBadge";
+import { SimulatedPill } from "@/components/ui/Status";
 import { AgentAvatar, AGENT_PALETTE, type AgentGlyph } from "@/components/agents/AgentAvatar";
 import { Brain3D } from "@/components/agents/Brain3D";
 import { cn } from "@/lib/cn";
+import { formatRelative } from "@/lib/format";
 import type { AgentPublic } from "@/services/types";
 
 const STATUS_DOT: Record<"idle" | "working" | "approval", string> = {
@@ -177,22 +179,20 @@ export default function AgentsPage() {
     <div className="flex flex-col h-full" data-tour="agents">
       {lastRunBanner?.insightId && (
         <div className="mx-6 md:mx-8 mt-2 mb-0 surface-2 border border-[var(--accent-border)] rounded-md px-3 py-2 flex flex-wrap items-center gap-3" data-tour="agents-run-banner">
-          <span className="text-caption text-fg-primary">
-            {locale === "bn" ? "রান সম্পন্ন — পরবর্তী ধাপ:" : "Run complete — next:"}
-          </span>
+          <SimulatedPill label={t("agents.runBannerTitle") as string} testId="agents-run-banner-pill" />
           <a href={`/app/insights?focus=${lastRunBanner.insightId}`} className="text-caption text-accent hover:underline">
-            {locale === "bn" ? "ইনসাইট" : "Insight"}
+            {t("agents.runBannerInsight") as string}
           </a>
           {lastRunBanner.approvalPending && (
             <a href={`/app/approvals?focus=${lastRunBanner.insightId}`} className="text-caption text-accent hover:underline">
-              {locale === "bn" ? "অনুমোদন" : "Approval"}
+              {t("agents.runBannerApproval") as string}
             </a>
           )}
           <a href="/app/activity" className="text-caption text-accent hover:underline">
-            {locale === "bn" ? "অ্যাক্টিভিটি / ফ্লোর অ্যালার্ট" : "Activity / floor alerts"}
+            {t("agents.runBannerActivity") as string}
           </a>
           <button type="button" className="ml-auto text-caption text-fg-tertiary hover:text-fg-primary" onClick={() => setLastRunBanner(null)}>
-            {locale === "bn" ? "বন্ধ" : "Dismiss"}
+            {t("agents.runBannerDismiss") as string}
           </button>
         </div>
       )}
@@ -318,7 +318,7 @@ export default function AgentsPage() {
                   aria-hidden
                 >
                   <span className="size-1.5 rounded-full" style={{ background: STATUS_DOT[node.runtimeStatus] }} />
-                  {node.runtimeStatus}
+                  {t(`agents.status${node.runtimeStatus.charAt(0).toUpperCase()}${node.runtimeStatus.slice(1)}`) as string}
                 </span>
               </div>
               {isSelected && (
@@ -484,7 +484,7 @@ function AgentPanel({
       <section>
         <p className="mono-pill text-fg-tertiary mb-1.5">{t("agents.detail.tasksToday")}</p>
         {insights.length === 0 ? (
-          <p className="text-caption text-fg-tertiary">No active insights.</p>
+          <p className="text-caption text-fg-tertiary">{t("agents.emptyInsights") as string}</p>
         ) : (
           <div className="space-y-2">
             {insights.map((i) => (
@@ -503,7 +503,7 @@ function AgentPanel({
           <ul className="divide-y divide-border-subtle">
             {recent.map((a) => (
               <li key={a.id} className="py-2 text-caption text-fg-secondary">
-                {locale === "bn" ? a.verbBn : a.verb} — <span className="text-fg-tertiary">{formatRel(a.isoDate, locale)}</span>
+                {locale === "bn" ? a.verbBn : a.verb} — <span className="text-fg-tertiary">{formatRelative(a.isoDate, locale as "en" | "bn")}</span>
               </li>
             ))}
           </ul>
@@ -524,19 +524,11 @@ function AgentPanel({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="surface-2 p-2.5">
+    <div className="surface-2 p-3">
       <p className="mono-pill text-fg-tertiary">{label}</p>
       <p className="mt-1 text-body text-fg-primary">{value}</p>
     </div>
   );
-}
-
-function formatRel(iso: string, locale: "en" | "bn") {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return locale === "bn" ? "এইমাত্র" : "just now";
-  if (diff < 3600) return locale === "bn" ? `${Math.round(diff / 60)} মিনিট আগে` : `${Math.round(diff / 60)} min ago`;
-  if (diff < 3600 * 24) return locale === "bn" ? `${Math.round(diff / 3600)} ঘণ্টা আগে` : `${Math.round(diff / 3600)} h ago`;
-  return locale === "bn" ? `${Math.round(diff / 86400)} দিন আগে` : `${Math.round(diff / 86400)} d ago`;
 }
 
 function MobileList() {

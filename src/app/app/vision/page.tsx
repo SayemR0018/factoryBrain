@@ -8,6 +8,7 @@ import { useT } from "@/lib/useT";
 import { useBusinessStore } from "@/store/business.store";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { SimulatedPill } from "@/components/ui/Status";
 import { cn } from "@/lib/cn";
 import type { VisionResultT } from "@/services/sensors.schemas";
 import type { InsightPublic } from "@/services/types";
@@ -146,14 +147,12 @@ export default function VisionPage() {
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="primary" size="sm" onClick={handleAnalyze} disabled={busy}>
-            <Sparkles size={12} /> {busy ? (locale === "bn" ? "বিশ্লেষণ হচ্ছে…" : "Analyzing…") : (t("vision.upload") as string)}
+            <Sparkles size={12} /> {busy ? (t("vision.analyzing") as string) : (t("vision.upload") as string)}
           </Button>
-          <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
-            aria-label="Simulated mode"
-          >
-            Simulated — demo VLM mapping
-          </span>
+          <SimulatedPill
+            label={t("vision.simulatedPill") as string}
+            testId="vision-simulated-pill"
+          />
           <span className="text-caption text-fg-tertiary mono-pill">{SAMPLE_FILES[fileIdx]}</span>
         </div>
       </Panel>
@@ -165,12 +164,10 @@ export default function VisionPage() {
           className="mt-4 surface-2 p-3"
         >
           <p className="text-caption text-[var(--risk-high)]">
-            {locale === "bn" ? "বিশ্লেষণ ব্যর্থ হয়েছে" : "Analyze failed"}: {error}
+            {t("vision.errorTitle") as string}: {error}
           </p>
           <p className="mt-1 text-caption text-fg-tertiary">
-            {locale === "bn"
-              ? "নমুনা ফাইলের নাম যাচাই করে আবার চেষ্টা করুন।"
-              : "Check the sample file name and retry."}
+            {t("vision.errorBody") as string}
           </p>
         </motion.div>
       )}

@@ -13,11 +13,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, Flag, RefreshCw } from "lucide-react";
+import { ArrowUpRight, Flag, RefreshCw } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
-import { Button, DemoChip } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState, SkeletonRows, SimulatedPill } from "@/components/ui/Status";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/useT";
 import { cn } from "@/lib/cn";
@@ -162,7 +162,7 @@ export function QcDefectsPanel() {
 
   const headerRight = (
     <div className="flex items-center gap-2">
-      {data?.meta?.simulated && <DemoChip>{t("qc.simulatedChip")}</DemoChip>}
+      {data?.meta?.simulated && <SimulatedPill label={t("qc.simulatedChip") as string} testId="qc-simulated-pill" />}
       <div className="hidden sm:inline-flex surface-2 rounded-md border border-border-subtle p-0.5">
         <button
           type="button"
@@ -204,27 +204,16 @@ export function QcDefectsPanel() {
   let body: React.ReactNode;
   if (error && !data) {
     body = (
-      <div>
-        <EmptyState
-          icon={<AlertTriangle size={20} />}
-          title={t("qc.loadFailed")}
-          body={t("qc.loadFailedBody")}
-        />
-        <div className="mt-3 flex justify-center">
-          <Button variant="secondary" size="sm" onClick={refresh}>
-            {t("qc.retry")}
-          </Button>
-        </div>
-      </div>
+      <ErrorState
+        title={t("qc.loadFailed") as string}
+        body={t("qc.loadFailedBody") as string}
+        detail={error}
+        retryLabel={t("qc.retry") as string}
+        onRetry={refresh}
+      />
     );
   } else if (loading && !data) {
-    body = (
-      <ul className="space-y-2" aria-hidden>
-        {[0, 1, 2, 3, 4].map((i) => (
-          <li key={i} className="surface-2 h-12 rounded-md border border-border-subtle animate-pulse" />
-        ))}
-      </ul>
-    );
+    body = <SkeletonRows rows={5} />;
   } else if (data) {
     body = (
       <div data-testid="qc-panel" data-simulated={data.meta.simulated ? "true" : "false"}>

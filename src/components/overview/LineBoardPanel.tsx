@@ -7,10 +7,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { ErrorState, SkeletonRows, SimulatedPill } from "@/components/ui/Status";
 import { useT } from "@/lib/useT";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
@@ -138,13 +138,10 @@ export function LineBoardPanel() {
 
   const headerRight = (
     <div className="flex items-center gap-2">
-      <span
-        className="mono-pill text-fg-tertiary border border-border-subtle bg-surface-2 px-2 py-0.5 rounded-sm"
-        data-testid="line-board-simulated-pill"
-        title={meta?.source ?? "Simulated"}
-      >
-        Simulated
-      </span>
+      <SimulatedPill
+        tip={meta?.source ?? "Simulated"}
+        testId="line-board-simulated-pill"
+      />
       {updatedAtLabel && (
         <span className="mono-pill text-fg-tertiary hidden sm:inline">
           {updatedAtLabel}
@@ -170,20 +167,15 @@ export function LineBoardPanel() {
       right={headerRight}
     >
       {error && !loading && rows.length === 0 ? (
-        <div>
-          <EmptyState
-            icon={<AlertTriangle size={20} />}
-            title={t("overview.loadFailed")}
-            body={t("overview.loadFailedBody")}
-          />
-          <div className="mt-3 flex justify-center">
-            <Button variant="secondary" size="sm" onClick={refresh}>
-              {t("overview.retry")}
-            </Button>
-          </div>
-        </div>
+        <ErrorState
+          title={t("overview.loadFailed")}
+          body={t("overview.loadFailedBody")}
+          detail={error}
+          retryLabel={t("overview.retry")}
+          onRetry={refresh}
+        />
       ) : rows.length === 0 && loading ? (
-        <SkeletonRows />
+        <SkeletonRows rows={6} rowHeight="h-14" />
       ) : (
         <div
           data-testid="line-board"
@@ -321,15 +313,5 @@ function BottleneckBadge({
       <span className={cn("size-1.5 rounded-full", BOTTLENECK_DOT[bottleneck])} aria-hidden />
       {locale === "bn" ? label : label}
     </span>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <div className="space-y-2" aria-hidden>
-      {[0, 1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="surface-2 h-14 rounded-md border border-border-subtle animate-pulse" />
-      ))}
-    </div>
   );
 }

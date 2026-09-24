@@ -82,21 +82,26 @@ export function WhatsAppAlert() {
 
   if (!enabled) return null;
 
+  const headerEvents = Math.max(bubbles.length - 1, 0);
+  const headerCount = locale === "bn"
+    ? `${headerEvents}টি ইভেন্ট`
+    : `${headerEvents} events`;
+
   return (
     <section className="surface p-4" aria-label={t("whatsapp.alert.title") as string}>
       <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#25D366]/20 border border-[#25D366]/40 text-[#1a8c4a]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#25D366]/20 border border-[#25D366]/40 text-[#1a8c4a] shrink-0">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
               <path d="M12 2C6.5 2 2 6.5 2 12c0 1.9.5 3.7 1.5 5.2L2 22l5-1.4c1.5.8 3.2 1.3 5 1.3 5.5 0 10-4.5 10-10S17.5 2 12 2zm5.6 14.1c-.2.6-1.3 1.2-1.8 1.3-.5.1-1 .1-3.3-.7-2.8-1-4.6-4.2-4.7-4.4-.1-.2-1.1-1.4-1.1-2.7 0-1.3.7-1.9 1-2.2.3-.3.6-.3.8-.3h.6c.2 0 .5-.1.7.5.2.6.8 2.1.9 2.3.1.2.1.4 0 .6-.1.2-.2.4-.4.5l-.3.4c-.2.2-.4.4-.2.8.3.4 1.1 1.8 2.4 2.9 1.6 1.5 3 2 3.4 2.2.4.2.7.2.9-.1.3-.3 1-1.2 1.3-1.6.3-.4.5-.3.9-.2.3.1 2.1 1 2.5 1.2.4.2.6.3.7.5.1.2.1.7-.1 1.3z" />
             </svg>
           </span>
           <div className="min-w-0">
-            <p className="text-body text-fg-primary">{t("whatsapp.alert.title")}</p>
-            <p className="text-caption text-fg-tertiary">{t("whatsapp.alert.subtitle") as string}</p>
+            <p className="text-body text-fg-primary truncate">{t("whatsapp.alert.title")}</p>
+            <p className="text-caption text-fg-tertiary truncate">{t("whatsapp.alert.subtitle") as string}</p>
           </div>
         </div>
-        <span className="mono-pill text-fg-tertiary">{Math.max(bubbles.length - 1, 0)} events</span>
+        <span className="mono-pill text-fg-tertiary shrink-0">{headerCount}</span>
       </header>
 
       <div

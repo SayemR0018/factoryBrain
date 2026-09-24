@@ -114,7 +114,40 @@ export const en = {
     refreshAria: "Refresh line board",
     retry: "Retry",
     loadFailed: "Couldn't load line board.",
-    loadFailedBody: "The simulated sensor feed didn't return a board. Try Simulate tick again."
+    loadFailedBody: "The simulated sensor feed didn't return a board. Try Simulate tick again.",
+    tickTitle: "Factory Brain — live tick",
+    tickAwaiting: "Awaiting first simulated tick…",
+    tickInit: "Calling /api/sensors/ingest on mount…",
+    tickFailed: "Tick failed: {message}. Retrying…",
+    tickUpdated: "Last simulated update {rel} · tick {tick}",
+    energyTitle: "Energy duty recommendation",
+    energyAwaiting: "Awaiting first energy reading…",
+    energyWindow: "{window} window · {readings} energy readings · {lines} lines",
+    energyCurrentDuty: "Current compressor duty",
+    energyRecommendedDuty: "Recommended duty",
+    energyExpectedSaved: "Expected kWh saved",
+    energyFloorAvg: "Floor-wide average",
+    energyOverWindow: "Over {window} window",
+    energyScore: "Score {score}",
+    energyNoChange: "No change required",
+    energyTrimBy: "Trim by {delta}%",
+    energyAwaitingBody: "The compressor duty card surfaces once the live tick streams its first energy reading.",
+    demoPathLabel: "Demo path:",
+    demoPathSimulate: "Simulate tick",
+    demoPathAgents: "Run agents",
+    demoPathFloor: "Floor alerts",
+    demoPathVision: "Vision",
+    demoPathAsk: "Ask",
+    avgEffLabel: "Avg line efficiency",
+    avgUptimeLabel: "Avg uptime",
+    energyTotalLabel: "Energy (kWh)",
+    machinesDownLabel: "Machines down",
+    machinesDownNote: "{atRisk} at risk",
+    latestReadingsLabel: "Latest readings",
+    latestReadingsNote: "sim tick {tick}",
+    effNote: "{n} lines",
+    uptimeNote: "rolling 6s",
+    energyNote: "accumulated"
   },
   ask: {
     title: "Ask BunonBrain",
@@ -234,7 +267,16 @@ export const en = {
       approval: "Approval required",
       paused: "Paused"
     },
-    runResult: "Run complete. Insight logged to the pipeline."
+    runResult: "Run complete. Insight logged to the pipeline.",
+    runBannerTitle: "Run complete — next:",
+    runBannerInsight: "Insight",
+    runBannerApproval: "Approval",
+    runBannerActivity: "Activity / floor alerts",
+    runBannerDismiss: "Dismiss",
+    emptyInsights: "No active insights.",
+    statusIdle: "idle",
+    statusWorking: "working",
+    statusApproval: "approval"
   },
   approvals: {
     title: "Approvals",
@@ -595,6 +637,21 @@ export const en = {
       empty: "No alerts right now."
     }
   },
+  floor: {
+    alerts: {
+      title: "Floor alerts",
+      subtitle: "Supervisor channel — simulated WhatsApp.",
+      simulatedChannel: "Simulated channel",
+      retry: "Retry",
+      retryHint: "Tap retry — last fetch failed.",
+      syncing: "Syncing…",
+      countUnread: "{total} alerts · {unread} unread",
+      markRead: "Mark read",
+      markUnread: "Mark unread",
+      emptyTitle: "No floor alerts yet",
+      emptyBody: "Simulated WhatsApp alerts from agent runs will show up here."
+    }
+  },
   vision: {
     title: "Vision-to-repair",
     body: "Upload a defect photo to get a short repair instruction in Bangla + English. Demo data only.",
@@ -603,7 +660,11 @@ export const en = {
     resultEn: "Repair instruction (English)",
     resultBn: "Repair instruction (Bangla)",
     repairTitle: "Repair instruction",
-    none: "No image selected yet."
+    none: "No image selected yet.",
+    simulatedPill: "Simulated — demo VLM mapping",
+    analyzing: "Analyzing…",
+    errorTitle: "Analyze failed",
+    errorBody: "Check the sample file name and retry."
   },
   factory: {
     labels: {

@@ -11,6 +11,7 @@ import { Bell, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState, SimulatedPill } from "@/components/ui/Status";
 import { useT } from "@/lib/useT";
 import { formatRelative } from "@/lib/format";
 import type { FloorAlertT } from "@/services/sensors.schemas";
@@ -24,7 +25,7 @@ const severityStyles: Record<Severity, string> = {
 };
 
 export function FloorAlertsPanel() {
-  const { locale } = useT();
+  const { t, locale } = useT();
   const [alerts, setAlerts] = useState<FloorAlertT[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,34 +78,33 @@ export function FloorAlertsPanel() {
   }, []);
 
   const unread = alerts?.filter((a) => !a.read).length ?? 0;
+  const total = alerts?.length ?? 0;
+
+  // Subtitle adapts to the current state — same rhythm as other panels.
+  const subtitle = error
+    ? (t("floor.alerts.retryHint") as string)
+    : loading
+    ? (t("floor.alerts.syncing") as string)
+    : (t("floor.alerts.countUnread", { total, unread }) as string);
 
   return (
-    <section className="surface p-4" aria-label="Floor alerts">
+    <section className="surface p-4" aria-label={t("floor.alerts.title") as string}>
       <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#25D366]/20 border border-[#25D366]/40 text-[#1a8c4a]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#25D366]/20 border border-[#25D366]/40 text-[#1a8c4a] shrink-0">
             <Bell size={14} />
           </span>
           <div className="min-w-0">
-            <p className="text-body text-fg-primary">
+            <p className="text-body text-fg-primary truncate">
               {locale === "bn" ? "ফ্লোর অ্যালার্ট (whatsapp_sim)" : "Floor alerts (whatsapp_sim)"}
             </p>
-            <p className="text-caption text-fg-tertiary">
-              {error
-                ? locale === "bn"
-                  ? "পুনরায় চেষ্টা করুন — শেষ ফেচ ব্যর্থ।"
-                  : "Tap retry — last fetch failed."
-                : loading
-                ? locale === "bn"
-                  ? "সিঙ্ক হচ্ছে…"
-                  : "Syncing…"
-                : locale === "bn"
-                ? `${alerts?.length ?? 0} অ্যালার্ট · ${unread} অপঠিত`
-                : `${alerts?.length ?? 0} alerts · ${unread} unread`}
-            </p>
+            <p className="text-caption text-fg-tertiary truncate">{subtitle}</p>
           </div>
         </div>
-        <span className="mono-pill text-fg-tertiary">Simulated channel</span>
+        <SimulatedPill
+          label={t("floor.alerts.simulatedChannel") as string}
+          testId="floor-alerts-simulated-pill"
+        />
       </header>
 
       <div
@@ -112,23 +112,24 @@ export function FloorAlertsPanel() {
         style={{ background: "linear-gradient(180deg, #ECE5DD 0%, #D9CBB7 100%)" }}
       >
         {loading && alerts === null ? (
-          <p className="text-caption text-fg-tertiary text-center mt-8">Syncing alerts…</p>
+          <p className="text-caption text-fg-tertiary text-center mt-8">
+            {t("floor.alerts.syncing") as string}
+          </p>
         ) : error ? (
-          <div className="mt-6 flex flex-col items-center gap-2 text-center">
-            <p className="text-caption text-fg-tertiary">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => void refresh()}>
-              Retry
-            </Button>
+          <div className="mt-4">
+            <ErrorState
+              title={t("floor.alerts.title") as string}
+              body={t("floor.alerts.retryHint") as string}
+              detail={error}
+              retryLabel={t("floor.alerts.retry") as string}
+              onRetry={() => void refresh()}
+            />
           </div>
         ) : alerts && alerts.length === 0 ? (
           <EmptyState
             className="mt-6 bg-transparent"
-            title={locale === "bn" ? "কোনো ফ্লোর অ্যালার্ট নেই" : "No floor alerts yet"}
-            body={
-              locale === "bn"
-                ? "এজেন্ট রান থেকে সিমুলেটেড WhatsApp সতর্কতা এখানে আসবে।"
-                : "Simulated WhatsApp alerts from agent runs will show up here."
-            }
+            title={t("floor.alerts.emptyTitle") as string}
+            body={t("floor.alerts.emptyBody") as string}
             icon={<Bell size={20} />}
           />
         ) : (
@@ -157,11 +158,11 @@ export function FloorAlertsPanel() {
                     {a.severity}
                   </span>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-caption text-fg-tertiary">
                     {formatRelative(a.createdAt, locale)}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {a.insightId && (
                       <Link
                         href={`/app/insights?focus=${a.insightId}`}
@@ -187,12 +188,8 @@ export function FloorAlertsPanel() {
                       onClick={() => void markRead(a.id, !a.read)}
                     >
                       {a.read
-                        ? locale === "bn"
-                          ? "অপঠিত করুন"
-                          : "Mark unread"
-                        : locale === "bn"
-                        ? "পঠিত"
-                        : "Mark read"}
+                        ? (t("floor.alerts.markUnread") as string)
+                        : (t("floor.alerts.markRead") as string)}
                     </Button>
                   </div>
                 </div>

@@ -113,7 +113,40 @@ export const bn: Dict = {
     refreshAria: "লাইন বোর্ড রিফ্রেশ করুন",
     retry: "পুনরায় চেষ্টা",
     loadFailed: "লাইন বোর্ড লোড হয়নি।",
-    loadFailedBody: "সিমুলেটেড সেন্সর ফিড থেকে কোনো বোর্ড পাওয়া যায়নি। আবার সিমুলেট টিক চেষ্টা করুন।"
+    loadFailedBody: "সিমুলেটেড সেন্সর ফিড থেকে কোনো বোর্ড পাওয়া যায়নি। আবার সিমুলেট টিক চেষ্টা করুন।",
+    tickTitle: "ফ্যাক্টরি ব্রেইন — লাইভ টিক",
+    tickAwaiting: "প্রথম সিমুলেটেড টিকের অপেক্ষা…",
+    tickInit: "মাউন্টে /api/sensors/ingest কল হচ্ছে…",
+    tickFailed: "টিক ব্যর্থ: {message}। আবার চেষ্টা হচ্ছে…",
+    tickUpdated: "সর্বশেষ সিমুলেটেড আপডেট {rel} · টিক {tick}",
+    energyTitle: "শক্তি দায়িত্ব সুপারিশ",
+    energyAwaiting: "প্রথম শক্তি রিডিংয়ের অপেক্ষা…",
+    energyWindow: "{window} উইন্ডো · {readings}টি শক্তি রিডিং · {lines}টি লাইন",
+    energyCurrentDuty: "বর্তমান কম্প্রেসর দায়িত্ব",
+    energyRecommendedDuty: "প্রস্তাবিত দায়িত্ব",
+    energyExpectedSaved: "প্রত্যাশিত সঞ্চয় (kWh)",
+    energyFloorAvg: "ফ্লোর-ব্যাপী গড়",
+    energyOverWindow: "{window} উইন্ডোতে",
+    energyScore: "স্কোর {score}",
+    energyNoChange: "পরিবর্তনের প্রয়োজন নেই",
+    energyTrimBy: "{delta}% কমানোর পরামর্শ",
+    energyAwaitingBody: "লাইভ টিক প্রথম শক্তি রিডিং পাঠালে কম্প্রেসর দায়িত্ব কার্ড দেখা যাবে।",
+    demoPathLabel: "ডেমো পথ:",
+    demoPathSimulate: "সিমুলেট টিক",
+    demoPathAgents: "এজেন্ট রান",
+    demoPathFloor: "ফ্লোর অ্যালার্ট",
+    demoPathVision: "ভিশন",
+    demoPathAsk: "জিজ্ঞাসা",
+    avgEffLabel: "গড় লাইন দক্ষতা",
+    avgUptimeLabel: "গড় আপটাইম",
+    energyTotalLabel: "শক্তি (kWh)",
+    machinesDownLabel: "মেশিন ডাউন",
+    machinesDownNote: "{atRisk}টি ঝুঁকিতে",
+    latestReadingsLabel: "সর্বশেষ রিডিং",
+    latestReadingsNote: "সিম টিক {tick}",
+    effNote: "{n}টি লাইন",
+    uptimeNote: "৬ সেকেন্ড ঘূর্ণায়মান",
+    energyNote: "সঞ্চিত"
   },
   ask: {
     title: "বুননব্রেইনকে জিজ্ঞাসা করুন",
@@ -233,7 +266,16 @@ export const bn: Dict = {
       approval: "অনুমোদন প্রয়োজন",
       paused: "বিরত"
     },
-    runResult: "রান সম্পন্ন। অন্তর্দৃষ্টি পাইপলাইনে লগ হয়েছে।"
+    runResult: "রান সম্পন্ন। অন্তর্দৃষ্টি পাইপলাইনে লগ হয়েছে।",
+    runBannerTitle: "রান সম্পন্ন — পরবর্তী ধাপ:",
+    runBannerInsight: "অন্তর্দৃষ্টি",
+    runBannerApproval: "অনুমোদন",
+    runBannerActivity: "কার্যকলাপ / ফ্লোর অ্যালার্ট",
+    runBannerDismiss: "বন্ধ",
+    emptyInsights: "কোনো সক্রিয় অন্তর্দৃষ্টি নেই।",
+    statusIdle: "idle",
+    statusWorking: "working",
+    statusApproval: "approval"
   },
   approvals: {
     title: "অনুমোদন",
@@ -594,6 +636,21 @@ export const bn: Dict = {
       empty: "এখন কোনো সতর্কতা নেই।"
     }
   },
+  floor: {
+    alerts: {
+      title: "ফ্লোর অ্যালার্ট",
+      subtitle: "সুপারভাইজার চ্যানেল — সিমুলেটেড হোয়াটসঅ্যাপ।",
+      simulatedChannel: "সিমুলেটেড চ্যানেল",
+      retry: "পুনরায় চেষ্টা",
+      retryHint: "আবার চেষ্টা করুন — শেষ ফেচ ব্যর্থ।",
+      syncing: "সিঙ্ক হচ্ছে…",
+      countUnread: "{total}টি অ্যালার্ট · {unread}টি অপঠিত",
+      markRead: "পঠিত",
+      markUnread: "অপঠিত করুন",
+      emptyTitle: "এখনও কোনো ফ্লোর অ্যালার্ট নেই",
+      emptyBody: "এজেন্ট রান থেকে সিমুলেটেড হোয়াটসঅ্যাপ সতর্কতা এখানে দেখা যাবে।"
+    }
+  },
   vision: {
     title: "ভিশন-টু-মেরামত",
     body: "একটি ত্রুটির ছবি আপলোড করে বাংলা + ইংরেজিতে মেরামতের নির্দেশনা পান। শুধু ডেমো ডেটা।",
@@ -602,7 +659,11 @@ export const bn: Dict = {
     resultEn: "মেরামত নির্দেশনা (ইংরেজি)",
     resultBn: "মেরামত নির্দেশনা (বাংলা)",
     repairTitle: "মেরামত নির্দেশনা",
-    none: "এখনও কোনো ছবি নির্বাচিত হয়নি।"
+    none: "এখনও কোনো ছবি নির্বাচিত হয়নি।",
+    simulatedPill: "সিমুলেটেড — ডেমো ভিএলএম ম্যাপিং",
+    analyzing: "বিশ্লেষণ হচ্ছে…",
+    errorTitle: "বিশ্লেষণ ব্যর্থ হয়েছে",
+    errorBody: "নমুনা ফাইলের নাম যাচাই করে আবার চেষ্টা করুন।"
   },
   factory: {
     labels: {

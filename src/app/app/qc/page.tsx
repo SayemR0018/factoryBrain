@@ -11,10 +11,10 @@
 // Demo data only — Simulated chip stays visible.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Flag, RefreshCw } from "lucide-react";
+import { Flag, RefreshCw } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Button, DemoChip } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { ErrorState, SkeletonRows, SimulatedPill } from "@/components/ui/Status";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/useT";
 import { cn } from "@/lib/cn";
@@ -152,7 +152,7 @@ export default function QcPage() {
 
   const headerRight = (
     <div className="flex items-center gap-2">
-      {data?.meta?.simulated && <DemoChip>{t("qc.simulatedChip")}</DemoChip>}
+      {data?.meta?.simulated && <SimulatedPill label={t("qc.simulatedChip") as string} testId="qc-page-simulated-pill" />}
       <Button
         variant="secondary"
         size="sm"
@@ -170,28 +170,17 @@ export default function QcPage() {
   const tableBody = (() => {
     if (error && !data) {
       return (
-        <div>
-          <EmptyState
-            icon={<AlertTriangle size={20} />}
-            title={t("qc.loadFailed")}
-            body={t("qc.loadFailedBody")}
-          />
-          <div className="mt-3 flex justify-center">
-            <Button variant="secondary" size="sm" onClick={refresh}>
-              {t("qc.retry")}
-            </Button>
-          </div>
-        </div>
+        <ErrorState
+          title={t("qc.loadFailed") as string}
+          body={t("qc.loadFailedBody") as string}
+          detail={error}
+          retryLabel={t("qc.retry") as string}
+          onRetry={refresh}
+        />
       );
     }
     if (loading && !data) {
-      return (
-        <ul className="space-y-2" aria-hidden>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <li key={i} className="surface-2 h-12 rounded-md border border-border-subtle animate-pulse" />
-          ))}
-        </ul>
-      );
+      return <SkeletonRows rows={8} />;
     }
     if (!data) return null;
 

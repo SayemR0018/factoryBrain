@@ -35,7 +35,7 @@ export default function ActivityPage() {
         <FloorAlertsPanel />
       </div>
 
-      <Panel className="mt-6">
+      <Panel className="mt-6" title={t("activity.title")}>
         {items.length === 0 ? (
           <EmptyState title={t("activity.empty")} />
         ) : (
@@ -64,7 +64,7 @@ export default function ActivityPage() {
                   </p>
                 </div>
                 {a.outcome && (
-                  <span className={`mono-pill border px-2 py-1 rounded-sm ${outcomeStyles[a.outcome]}`}>
+                  <span className={`mono-pill border px-2 py-1 rounded-sm shrink-0 ${outcomeStyles[a.outcome]}`}>
                     {a.outcome}
                   </span>
                 )}

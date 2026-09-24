@@ -11,6 +11,7 @@ import { Sparkline } from "@/components/ui/Sparkline";
 import { StageBadge, RiskPill } from "@/components/ui/StatusPill";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
+import { SimulatedPill } from "@/components/ui/Status";
 import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
 import { QcDefectsPanel } from "@/components/overview/QcDefectsPanel";
 import { BriefCard } from "@/components/overview/BriefCard";
@@ -170,23 +171,21 @@ export default function OverviewPage() {
         data-tour="judge-walkthrough"
         aria-label="Demo walkthrough"
       >
-        <span className="mono-pill text-fg-tertiary">
-          {locale === "bn" ? "ডেমো পথ:" : "Demo path:"}
-        </span>
+        <span className="mono-pill text-fg-tertiary">{t("overview.demoPathLabel")}</span>
         <span className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-fg-secondary">
-          1. {locale === "bn" ? "সিমুলেট টিক" : "Simulate tick"}
+          1. {t("overview.demoPathSimulate")}
         </span>
         <Link href="/app/agents" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          2. {locale === "bn" ? "এজেন্ট রান" : "Run agents"}
+          2. {t("overview.demoPathAgents")}
         </Link>
         <Link href="/app/activity" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          3. {locale === "bn" ? "ফ্লোর অ্যালার্ট" : "Floor alerts"}
+          3. {t("overview.demoPathFloor")}
         </Link>
         <Link href="/app/vision" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          4. Vision
+          4. {t("overview.demoPathVision")}
         </Link>
         <Link href="/app/ask?q=compressor%20duty" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          5. Ask
+          5. {t("overview.demoPathAsk")}
         </Link>
       </div>
 
@@ -233,20 +232,15 @@ export default function OverviewPage() {
       {/* Live sensor tick — extends the page without touching existing layout. */}
       <Panel
         className="mt-6"
-        title="Factory Brain — live tick"
+        title={t("overview.tickTitle")}
         subtitle={
           snapshot
-            ? `Last simulated update ${formatRelative(snapshot.appliedAt, locale)} · tick ${snapshot.tick}`
-            : "Awaiting first simulated tick…"
+            ? (t("overview.tickUpdated", { rel: formatRelative(snapshot.appliedAt, locale), tick: snapshot.tick }) as string)
+            : (t("overview.tickAwaiting") as string)
         }
         right={
           <div className="flex items-center gap-2">
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
-              aria-label="Simulated data"
-            >
-              Simulated
-            </span>
+            <SimulatedPill tip="Simulated data" testId="live-tick-simulated-pill" />
             <Button
               variant="secondary"
               size="sm"
@@ -256,7 +250,7 @@ export default function OverviewPage() {
             >
               <span className="inline-flex items-center gap-1.5">
                 <RefreshCw size={14} className={fetching ? "animate-spin" : undefined} />
-                Simulate tick
+                {t("overview.demoPathSimulate")}
               </span>
             </Button>
           </div>
@@ -265,52 +259,52 @@ export default function OverviewPage() {
         {!snapshot ? (
           <p className="text-caption text-fg-tertiary">
             {liveError
-              ? `Tick failed: ${liveError}. Retrying…`
-              : "Calling /api/sensors/ingest on mount…"}
+              ? (t("overview.tickFailed", { message: liveError }) as string)
+              : (t("overview.tickInit") as string)}
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <LiveMetric
-              label="Avg line efficiency"
+              label={t("overview.avgEffLabel") as string}
               value={formatPercent(avgEff, locale)}
               delta={sparkDelta(sparks.eff)}
               spark={sparks.eff}
               locale={locale}
-              note={`${liveLines.length} lines`}
+              note={t("overview.effNote", { n: liveLines.length }) as string}
               goodDir="up"
             />
             <LiveMetric
-              label="Avg uptime"
+              label={t("overview.avgUptimeLabel") as string}
               value={formatPercent(avgUptime, locale)}
               delta={sparkDelta(sparks.uptime)}
               spark={sparks.uptime}
               locale={locale}
-              note="rolling 6s"
+              note={t("overview.uptimeNote") as string}
               goodDir="up"
             />
             <LiveMetric
-              label="Energy (kWh)"
+              label={t("overview.energyTotalLabel") as string}
               value={formatNumber(Math.round(totalEnergy), locale)}
               delta={sparkDelta(sparks.energy)}
               spark={sparks.energy}
               locale={locale}
-              note="accumulated"
+              note={t("overview.energyNote") as string}
               goodDir="down"
             />
             <LiveMetric
-              label="Machines down"
+              label={t("overview.machinesDownLabel") as string}
               value={`${machinesDown}`}
               delta={null}
               locale={locale}
-              note={`${machinesAtRisk} at risk`}
+              note={t("overview.machinesDownNote", { atRisk: machinesAtRisk }) as string}
               tone={machinesDown > 0 ? "risk" : "neutral"}
             />
             <LiveMetric
-              label="Latest readings"
+              label={t("overview.latestReadingsLabel") as string}
               value={`${snapshot.readings.length}`}
               delta={null}
               locale={locale}
-              note={`sim tick ${snapshot.tick}`}
+              note={t("overview.latestReadingsNote", { tick: snapshot.tick }) as string}
             />
           </div>
         )}
@@ -334,27 +328,23 @@ export default function OverviewPage() {
           learned policy. */}
       <Panel
         className="mt-6"
-        title="Energy duty recommendation"
+        title={t("overview.energyTitle")}
         subtitle={
           energyRec
-            ? `${energyRec.basedOn.window} window · ${energyRec.basedOn.sensorReadings} energy readings · ${energyRec.basedOn.lineCount} lines`
-            : "Awaiting first energy reading…"
+            ? (t("overview.energyWindow", {
+                window: energyRec.basedOn.window,
+                readings: energyRec.basedOn.sensorReadings,
+                lines: energyRec.basedOn.lineCount
+              }) as string)
+            : (t("overview.energyAwaiting") as string)
         }
         right={
-          <div className="flex items-center gap-2">
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption border border-border-subtle bg-[var(--accent-soft)] text-accent"
-              aria-label="Simulated — not reinforcement learning"
-              data-testid="energy-duty-simulated-pill"
-            >
-              Simulated · not RL
-            </span>
-          </div>
+          <SimulatedPill notRL testId="energy-duty-simulated-pill" />
         }
       >
         {!energyRec ? (
           <p className="text-caption text-fg-tertiary">
-            The compressor duty card surfaces once the live tick streams its first energy reading.
+            {t("overview.energyAwaitingBody") as string}
           </p>
         ) : (
           <EnergyDutyCard rec={energyRec} locale={locale} />
@@ -618,6 +608,7 @@ function LiveMetric({
  *  the related manual (doc-5 — "Energy spike on Line 4 compressor").
  *  No ML / RL surface here — the headline explicitly states that. */
 function EnergyDutyCard({ rec, locale }: { rec: EnergyDutyTool; locale: "en" | "bn" }) {
+  const { t } = useT();
   const delta = rec.currentDutyPct - rec.recommendedDutyPct;
   const tone =
     rec.score > 0.6 ? "high" : rec.score >= 0.3 ? "medium" : "low";
@@ -628,38 +619,30 @@ function EnergyDutyCard({ rec, locale }: { rec: EnergyDutyTool; locale: "en" | "
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="energy-duty-card">
       <div className="surface-2 p-4">
-        <p className="text-caption text-fg-tertiary">Current compressor duty</p>
+        <p className="text-caption text-fg-tertiary">{t("overview.energyCurrentDuty")}</p>
         <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
           {rec.currentDutyPct}%
         </p>
-        <p className="mt-1 text-caption text-fg-tertiary">
-          {locale === "bn" ? "ফ্লোর-ব্যাপী গড়" : "Floor-wide average"}
-        </p>
+        <p className="mt-1 text-caption text-fg-tertiary">{t("overview.energyFloorAvg")}</p>
       </div>
       <div className="surface-2 p-4">
-        <p className="text-caption text-fg-tertiary">Recommended duty</p>
+        <p className="text-caption text-fg-tertiary">{t("overview.energyRecommendedDuty")}</p>
         <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
           {rec.recommendedDutyPct}%
         </p>
         <p className="mt-1 text-caption text-fg-tertiary">
           {delta > 0
-            ? locale === "bn"
-              ? `${delta}% কমানোর পরামর্শ`
-              : `Trim by ${delta}%`
-            : locale === "bn"
-            ? "পরিবর্তনের প্রয়োজন নেই"
-            : "No change required"}
+            ? (t("overview.energyTrimBy", { delta }) as string)
+            : (t("overview.energyNoChange") as string)}
         </p>
       </div>
       <div className="surface-2 p-4">
-        <p className="text-caption text-fg-tertiary">
-          {locale === "bn" ? "প্রত্যাশিত সঞ্চয় (kWh)" : "Expected kWh saved"}
-        </p>
+        <p className="text-caption text-fg-tertiary">{t("overview.energyExpectedSaved")}</p>
         <p className="mt-1 text-[28px] leading-[34px] font-semibold tracking-tight">
           {rec.expectedKwhSaved.toFixed(1)}
         </p>
         <p className="mt-1 text-caption text-fg-tertiary">
-          {locale === "bn" ? `${rec.basedOn.window} উইন্ডোতে` : `Over ${rec.basedOn.window} window`}
+          {t("overview.energyOverWindow", { window: rec.basedOn.window })}
         </p>
       </div>
 
@@ -675,7 +658,7 @@ function EnergyDutyCard({ rec, locale }: { rec: EnergyDutyTool; locale: "en" | "
             className="mt-0.5 inline-flex items-center gap-1 text-caption font-medium"
             style={{ color: `var(--${toneFg})` }}
           >
-            {locale === "bn" ? `স্কোর ${rec.score.toFixed(2)}` : `Score ${rec.score.toFixed(2)}`}
+            {t("overview.energyScore", { score: rec.score.toFixed(2) })}
           </span>
           <p className="text-caption text-fg-primary">{rationale}</p>
         </div>

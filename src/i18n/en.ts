@@ -358,6 +358,58 @@ export const en = {
       search: { title: "Search everything", body: "⌘K / Ctrl+K finds orders, insights, settings fields — with deep links and a highlight on the target." }
     }
   },
+  landing: {
+    eyebrow: "Factory Brain · mid-tier BD RMG",
+    headlineLead: "Factory Brain understands your floor,",
+    headlineAccent: "then runs it for you.",
+    subhead: "BunonBrain is the operations layer for a mid-tier Bangladeshi garment plant. Connect your sensor feeds, watch the Factory Brain graph form, then ask the floor in Bangla or English. Every answer carries evidence. Every high-risk action waits for your sign-off.",
+    ctaPrimary: "Enter demo",
+    ctaPrimaryHint: "Skip onboarding, jump straight into the live demo plant.",
+    ctaSecondary: "Tour in 2 min",
+    ctaSecondaryHint: "Walk the guided product tour first.",
+    badge: "Demo · simulated data, calibrated against public datasets",
+    valueProps: {
+      liveLine: {
+        title: "Live line board",
+        body: "Efficiency, defect rate and WIP roll up line by line. The dashboard updates as the simulated floor ticks — no refresh needed."
+      },
+      alerts: {
+        title: "Bottleneck & floor alerts",
+        body: "Maintenance, line-throughput and manager agents surface the bottleneck, the failing machine, and the order at risk — before your floor manager sees it on paper."
+      },
+      bangla: {
+        title: "Ask in Bangla, answer in Bangla",
+        body: "Type \"লাইন ৩ এর efficiency কত?\" and get a Bangla finding with the same evidence the English answer carries. Manual pages, sensor data and policies are all in scope."
+      }
+    },
+    socialProof: {
+      kicker: "Built for mid-tier RMG",
+      body: "Designed around a 30-line knit plant in the BD-RMG profile: woven and knit lines, one cutting section, three finishing sections, ~3,000 workers. No Fortune-500 dashboards — no fake logos either.",
+      pillars: [
+        "Woven, knit & denim lines",
+        "BDT currency · 12-hour shifts",
+        "Bangla + English operations",
+        "Manual-corpus grounded answers"
+      ]
+    },
+    howItWorks: {
+      kicker: "How it fits your floor",
+      steps: [
+        "Connect · Ingest sensor feeds, ERP exports, manual PDFs and the daily WhatsApp queue. Demo mode simulates every source so the rest of the app stays honest.",
+        "Understand · The Factory Brain builds a graph of lines, machines, orders and suppliers. Every insight cites the records it came from.",
+        "Act · Ask in Bangla, route to the right agent, approve the high-risk items. Every decision lands in the activity log."
+      ]
+    },
+    honesty: {
+      kicker: "Honest defaults",
+      body: "Demo data is clearly labelled simulated, calibrated against public datasets. The LLM key is server-only — the key never enters your browser, Zustand, cookies, or the URL."
+    },
+    footer: {
+      tagline: "BunonBrain — Factory Brain for mid-tier BD RMG plants.",
+      cta: "Enter demo",
+      secondary: "Take the 2-min tour"
+    }
+  },
   onboarding: {
     welcome: {
       eyebrow: "BUNONBRAIN",

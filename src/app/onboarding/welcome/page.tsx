@@ -2,13 +2,25 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useT } from "@/lib/useT";
 import { Button } from "@/components/ui/Button";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { businessService } from "@/services/business.service";
 
 export default function WelcomePage() {
   const { t } = useT();
+  const router = useRouter();
+
+  function enterDemo() {
+    // Single source of truth: every path that reaches /app must mark the user
+    // onboarded FIRST. Without this, /app's layout gate bounces them back to
+    // /onboarding/welcome. See src/app/app/layout.tsx for the gate.
+    businessService.completeOnboarding();
+    router.push("/app");
+  }
+
   return (
     <div className="min-h-[calc(100vh-65px)] flex flex-col items-center justify-center px-6 gap-8">
       <motion.div
@@ -36,12 +48,17 @@ export default function WelcomePage() {
         </p>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          {/* 1-click path → /app. This is the default for judges / demo. */}
-          <Link href="/app">
-            <Button variant="primary" size="lg" iconRight={<ArrowRight size={16} />}>
-              {t("onboarding.welcome.ctaSkip")}
-            </Button>
-          </Link>
+          {/* 1-click path → /app. This is the default for judges / demo.
+              Must call completeOnboarding() before router.push so the /app
+              gate (which checks isOnboarded) doesn't bounce the user back. */}
+          <Button
+            variant="primary"
+            size="lg"
+            iconRight={<ArrowRight size={16} />}
+            onClick={enterDemo}
+          >
+            {t("onboarding.welcome.ctaSkip")}
+          </Button>
           {/* Optional 1-extra-step path for the operator who wants to seed their profile. */}
           <Link href="/onboarding/profile">
             <Button variant="secondary" size="lg" iconLeft={<Sparkles size={14} />}>

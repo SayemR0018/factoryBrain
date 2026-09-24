@@ -97,7 +97,7 @@ async function main() {
     "src/services/qc.defects.server.ts",
     "src/app/api/qc/defects/route.ts",
     "src/app/api/qc/flag/route.ts",
-    "src/components/overview/QcDefectsPanel.tsx",
+    "src/components/overview/QcSummary.tsx",
     "src/app/app/qc/page.tsx"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
@@ -246,14 +246,13 @@ async function main() {
   assert(qcFlagRoute.includes(".strict()"), "qc/flag: body + response schemas are Zod-strict");
   assert(qcFlagRoute.includes("FlagResponseSchema"), "qc/flag: response schema parsed");
 
-  const qcPanel = await read("src/components/overview/QcDefectsPanel.tsx");
-  assert(qcPanel.includes('export function QcDefectsPanel'), "QcDefectsPanel: component exported");
-  assert(qcPanel.includes('"/api/qc/defects"'), "QcDefectsPanel: fetches real /api/qc/defects (not mock state)");
-  assert(qcPanel.includes('"/api/qc/flag"'), "QcDefectsPanel: POSTs to /api/qc/flag");
-  assert(qcPanel.includes("useFactoryBrainLiveStore"), "QcDefectsPanel: subscribes to live tick store");
-  assert(qcPanel.includes('data-testid="qc-panel"'), "QcDefectsPanel: smoke-visible testid present");
-  assert(qcPanel.includes("useToast"), "QcDefectsPanel: surfaces a toast on flag");
-  assert(qcPanel.includes("Simulated") || qcPanel.includes("simulatedChip"), "QcDefectsPanel: keeps simulated label visible");
+  // Overview shows a one-liner QC summary that links to /app/qc.
+  const qcSummary = await read("src/components/overview/QcSummary.tsx");
+  assert(qcSummary.includes("export function QcSummary"), "QcSummary: component exported");
+  assert(qcSummary.includes('"/api/qc/defects"'), "QcSummary: fetches real /api/qc/defects (not mock state)");
+  assert(qcSummary.includes("useFactoryBrainLiveStore"), "QcSummary: subscribes to live tick store");
+  assert(qcSummary.includes('data-testid="qc-summary"'), "QcSummary: smoke-visible testid present");
+  assert(qcSummary.includes('href="/app/qc"'), "QcSummary: deep-links to /app/qc");
 
   const qcPage = await read("src/app/app/qc/page.tsx");
   assert(qcPage.includes('"/api/qc/defects"'), "qc page: fetches real /api/qc/defects");
@@ -261,8 +260,8 @@ async function main() {
   assert(qcPage.includes('data-testid="qc-page-table"'), "qc page: smoke-visible testid present");
   assert(qcPage.includes("useFactoryBrainLiveStore"), "qc page: subscribes to live tick store");
 
-  // Overview must mount the QC panel alongside the Line Board.
-  assert(overview.includes("<QcDefectsPanel"), "overview: mounts <QcDefectsPanel />");
+  // Overview mounts the one-liner QC summary alongside the Line Board.
+  assert(overview.includes("<QcSummary"), "overview: mounts <QcSummary />");
   assert(overview.includes("<LineBoardPanel"), "overview: still mounts <LineBoardPanel />");
 
   // Sidebar gains a QC link in the Operations group.
@@ -286,7 +285,10 @@ async function main() {
     "colLine:",
     "colDefectRate:",
     "colReworkRate:",
-    "flagAria:"
+    "flagAria:",
+    "summaryLabel:",
+    "summaryLoading:",
+    "summaryOpen:"
   ]) {
     assert(en.includes(k), `i18n en: has qc.${k.replace(/:$/, "")}`);
     assert(bn.includes(k), `i18n bn: has qc.${k.replace(/:$/, "")}`);
@@ -498,6 +500,16 @@ async function runSettingsLlmRuntimeCheck() {
     await waitForServer(base);
     const headers = { "Content-Type": "application/json" };
 
+    // Hit GET /api/settings/llm FIRST and explicitly assert the runtime
+    // contract: response JSON has no apiKey, no LLM_API_KEY, and no
+    // key-shaped string field. This is the runtime-only companion to the
+    // static file-level checks in section 9 and is intentionally separate
+    // from the broader assertNoSecret() below.
+    const probeRaw = await fetch(base + "/api/settings/llm", { cache: "no-store" });
+    assertNoStore(probeRaw, "settings/llm GET (probe)");
+    const probeJson = await probeRaw.json();
+    assertNoLeakedKey(probeJson, "GET /api/settings/llm (probe)");
+
     // Initial GET — neither key nor env var name should appear, status is
     // demo mode with no provider / model, persistence flag is one of the
     // three valid options. Also assert Cache-Control: no-store so the
@@ -506,6 +518,7 @@ async function runSettingsLlmRuntimeCheck() {
     assertNoStore(initialRaw, "settings/llm GET (initial)");
     const initial = await initialRaw.json();
     assertNoSecret(initial, FAKE_KEY, "GET (initial)");
+    assertNoLeakedKey(initial, "GET /api/settings/llm (initial)");
     assert(initial.configured === false, "settings/llm: initial configured === false (no env)");
     assert(initial.mode === "demo", "settings/llm: initial mode === demo");
     assert(initial.provider === null, "settings/llm: initial provider === null");
@@ -526,6 +539,7 @@ async function runSettingsLlmRuntimeCheck() {
     // never any apiKey-shaped field or value.
     const postParsed = JSON.parse(postText);
     assertNoSecret(postParsed, FAKE_KEY, "POST response");
+    assertNoLeakedKey(postParsed, "POST /api/settings/llm response");
     assert(postParsed.configured === true, "POST sets configured: true after fake key saved");
 
     // GET again — status should now show configured=true, and still
@@ -534,6 +548,7 @@ async function runSettingsLlmRuntimeCheck() {
     assertNoStore(afterRaw, "settings/llm GET (after POST)");
     const after = await afterRaw.json();
     assertNoSecret(after, FAKE_KEY, "GET (after POST)");
+    assertNoLeakedKey(after, "GET /api/settings/llm (after POST)");
     assert(after.configured === true, "GET after POST reports configured: true");
     assert(after.mode === "live", "GET after POST reports mode: live");
     assert(after.provider === "openai", "GET after POST reports provider: openai");
@@ -550,6 +565,7 @@ async function runSettingsLlmRuntimeCheck() {
     assert(cleared.configured === false, "GET after clearKey reports configured: false");
     assert(cleared.mode === "demo", "GET after clearKey reports mode: demo");
     assertNoSecret(cleared, FAKE_KEY, "GET (after clear)");
+    assertNoLeakedKey(cleared, "GET /api/settings/llm (after clear)");
 
     // Line-board (improve batch) — runtime contract against the same server.
     const boardRaw = await fetch(base + "/api/line-board", { cache: "no-store" });
@@ -850,18 +866,48 @@ function assertNoSecret(obj, fakeKey, label) {
   // "apiKey" or "LLM_API_KEY", so we assert on parsed-object shape rather
   // than the raw text (the route's notice strings legitimately reference
   // the env-var name as part of guidance).
-  assert(obj.apiKey === undefined, `${label}: parsed object has no apiKey field`);
-  assert(obj.LLM_API_KEY === undefined, `${label}: parsed object has no LLM_API_KEY field`);
-  // And the json MUST NOT carry anything resembling an apiKey-shaped pair
-  // — i.e. no key ending in "ApiKey"/"API_KEY" with a non-empty value.
-  if (obj && typeof obj === "object") {
-    for (const k of Object.keys(obj)) {
-      if (/api_?key/i.test(k)) {
-        assert(obj[k] === undefined || obj[k] === null || obj[k] === "",
-          `${label}: parsed object has no apiKey-shaped field "${k}" with a value`);
+  assertNoLeakedKey(obj, label);
+}
+
+// Explicit runtime assertion for GET /api/settings/llm-style responses:
+// the JSON object MUST NOT have a top-level `apiKey`, a top-level
+// `LLM_API_KEY`, or any field whose name matches an apiKey-shaped regex
+// carrying a non-empty value — recursively. This is the runtime smoke
+// companion to the static file-level checks in section 9.
+function assertNoLeakedKey(obj, label) {
+  assert(obj && typeof obj === "object" && !Array.isArray(obj), `${label}: response is a plain object`);
+  // (1) No `apiKey` field anywhere.
+  assert(obj.apiKey === undefined, `${label}: response JSON has no apiKey field`);
+  // (2) No `LLM_API_KEY` field anywhere.
+  assert(obj.LLM_API_KEY === undefined, `${label}: response JSON has no LLM_API_KEY field`);
+  // (3) No key-shaped string field, recursively.
+  const violations = [];
+  function walk(node, path) {
+    if (node === null || node === undefined) return;
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) walk(node[i], path + "[" + i + "]");
+      return;
+    }
+    if (typeof node !== "object") return;
+    for (const k of Object.keys(node)) {
+      const child = node[k];
+      // Match any key whose name looks like an API key (apiKey, API_KEY,
+      // api_key, api-key, etc.) — case-insensitive, with optional separators.
+      // We only flag values that are non-empty strings — booleans/nulls/
+      // undefined are allowed.
+      if (/api[_\- ]?key/i.test(k) || /LLM_API_KEY/i.test(k)) {
+        if (typeof child === "string" && child.length > 0) {
+          violations.push(`${path}.${k} = ${JSON.stringify(child).slice(0, 64)}`);
+        }
       }
+      walk(child, path === "" ? k : path + "." + k);
     }
   }
+  walk(obj, "");
+  assert(
+    violations.length === 0,
+    `${label}: response JSON has no key-shaped string field (violations: ${violations.join(", ")})`
+  );
 }
 
 function assertNoStore(response, label) {

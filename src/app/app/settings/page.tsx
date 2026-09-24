@@ -187,13 +187,6 @@ function ProfileSection({ flash, savedKey }: { flash: (k: string) => void; saved
           onBlur={() => flash("profile")}
         />
       </Row>
-      <Row label={t("settings.industry")}>
-        <Input
-          value={profile.industry}
-          onChange={(e) => setProfile({ industry: e.target.value })}
-          onBlur={() => flash("profile")}
-        />
-      </Row>
       <Row label={t("settings.city")}>
         <Input
           value={profile.city}
@@ -213,33 +206,6 @@ function ProfileSection({ flash, savedKey }: { flash: (k: string) => void; saved
           value={profile.timezone}
           onChange={(e) => setProfile({ timezone: e.target.value })}
           onBlur={() => flash("profile")}
-        />
-      </Row>
-      <Row label={t("settings.fiscalMonthStart")} hint="Day of month your fiscal month starts">
-        <Input
-          type="number"
-          min={1}
-          max={28}
-          value={profile.fiscalMonthStart}
-          onChange={(e) => setProfile({ fiscalMonthStart: Math.max(1, Math.min(28, Number(e.target.value) || 1)) })}
-          onBlur={() => flash("profile")}
-          className="w-24 text-right"
-        />
-      </Row>
-      <Row label={t("settings.whatYouSell")}>
-        <textarea
-          value={profile.whatYouSell}
-          onChange={(e) => setProfile({ whatYouSell: e.target.value })}
-          onBlur={() => flash("profile")}
-          className="min-h-20 w-full rounded-md bg-surface-2 border border-border-subtle px-3 py-2 text-body text-fg-primary focus:outline-none focus:border-border-strong"
-        />
-      </Row>
-      <Row label={t("settings.customers")}>
-        <textarea
-          value={profile.customers}
-          onChange={(e) => setProfile({ customers: e.target.value })}
-          onBlur={() => flash("profile")}
-          className="min-h-20 w-full rounded-md bg-surface-2 border border-border-subtle px-3 py-2 text-body text-fg-primary focus:outline-none focus:border-border-strong"
         />
       </Row>
       <Row label={t("settings.goals")} hint="Pick up to three">

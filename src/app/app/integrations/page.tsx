@@ -17,7 +17,6 @@ import type { IngestionSourceCategory } from "@/store/business.store";
 import type { IngestionSourcePublic } from "@/services/types";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
-import Link from "next/link";
 
 type SyncStatus = "idle" | "syncing" | "ok" | "fail";
 
@@ -91,9 +90,9 @@ export default function IntegrationsPage() {
             icon={<PlugZap size={28} />}
           />
           <div className="mt-4 flex justify-center">
-            <Link href="/onboarding/connect">
-              <Button variant="primary">{t("integrations.emptyCta")}</Button>
-            </Link>
+            <Button variant="primary" onClick={() => setConnectFor("rfid-bundles")}>
+              {t("integrations.emptyCta")}
+            </Button>
           </div>
         </div>
       ) : (

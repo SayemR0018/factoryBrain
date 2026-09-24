@@ -11,6 +11,7 @@ import { tArray } from "@/i18n/registry";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { businessService } from "@/services/business.service";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -34,12 +35,18 @@ export default function ProfilePage() {
     // Onboarding is intentionally short: after the profile seed we go
     // straight to the app. RFID / machine telemetry / energy / Documents
     // are optional and live under Integrations.
+    // completeOnboarding() must run BEFORE router.push so /app's gate
+    // (isOnboarded check) lets the user through instead of bouncing them
+    // back to /onboarding/welcome.
+    businessService.completeOnboarding();
     router.push("/app");
   }
 
   function skipToApp() {
-    // Persist whatever is filled in, then enter the app.
+    // Persist whatever is filled in, then enter the app. Same gate as
+    // next(): mark onboarded before navigating.
     setProfile({ industry, whatYouSell: what, customers: who, goals });
+    businessService.completeOnboarding();
     router.push("/app");
   }
 

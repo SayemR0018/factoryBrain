@@ -61,7 +61,10 @@ export const bn: Dict = {
     colDefect: "ত্রুটি",
     colDefectRate: "ত্রুটি %",
     colReworkRate: "রি-ওয়ার্ক %",
-    generated: "{rel}-এ তৈরি"
+    generated: "{rel}-এ তৈরি",
+    summaryLabel: "শীর্ষ ত্রুটি —",
+    summaryLoading: "লোড হচ্ছে…",
+    summaryOpen: "মান নিয়ন্ত্রণ গ্রিড দেখুন"
   },
   nav: {
     overview: "সারসংক্ষেপ",

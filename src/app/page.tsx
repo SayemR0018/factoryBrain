@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight, Activity, AlertTriangle, MessagesSquare, ShieldCheck } from "lucide-react";
 import { useT } from "@/lib/useT";
@@ -8,9 +9,20 @@ import { tArray } from "@/i18n/registry";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
 import { Button } from "@/components/ui/Button";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { businessService } from "@/services/business.service";
 
 export default function LandingPage() {
   const { t, locale } = useT();
+  const router = useRouter();
+
+  /** Single source of truth for "Enter demo" from outside the app.
+   *  Mark onboarding complete before navigating so /app's gate
+   *  (which checks isOnboarded) lets the user through. Without this,
+   *  fresh users bounce between Landing → /onboarding/welcome → /app. */
+  function enterDemo() {
+    businessService.completeOnboarding();
+    router.push("/app");
+  }
 
   const valuePropIcons = [Activity, AlertTriangle, MessagesSquare];
   const valuePropKeys = ["liveLine", "alerts", "bangla"] as const;
@@ -40,11 +52,15 @@ export default function LandingPage() {
         </Link>
         <div className="flex items-center gap-3">
           <LanguageToggle />
-          <Link href="/app" aria-label={t("landing.ctaPrimary") as string}>
-            <Button variant="primary" size="md" iconRight={<ArrowRight size={14} />}>
-              {t("landing.ctaPrimary")}
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            size="md"
+            iconRight={<ArrowRight size={14} />}
+            onClick={enterDemo}
+            aria-label={t("landing.ctaPrimary") as string}
+          >
+            {t("landing.ctaPrimary")}
+          </Button>
         </div>
       </header>
 
@@ -85,11 +101,15 @@ export default function LandingPage() {
           transition={{ delay: 0.24, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="mt-8 flex flex-wrap items-center gap-3"
         >
-          <Link href="/app" aria-label={t("landing.ctaPrimary") as string}>
-            <Button variant="primary" size="lg" iconRight={<ArrowRight size={16} />}>
-              {t("landing.ctaPrimary")}
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            size="lg"
+            iconRight={<ArrowRight size={16} />}
+            onClick={enterDemo}
+            aria-label={t("landing.ctaPrimary") as string}
+          >
+            {t("landing.ctaPrimary")}
+          </Button>
           <Link
             href="/onboarding/welcome"
             aria-label={t("landing.ctaSecondary") as string}
@@ -237,11 +257,14 @@ export default function LandingPage() {
                 {t("landing.footer.secondary")}
               </Button>
             </Link>
-            <Link href="/app">
-              <Button variant="primary" size="md" iconRight={<ArrowRight size={14} />}>
-                {t("landing.footer.cta")}
-              </Button>
-            </Link>
+            <Button
+              variant="primary"
+              size="md"
+              iconRight={<ArrowRight size={14} />}
+              onClick={enterDemo}
+            >
+              {t("landing.footer.cta")}
+            </Button>
           </div>
         </div>
       </footer>

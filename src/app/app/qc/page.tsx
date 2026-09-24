@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/useT";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
+import { qcOperationLabel, qcRateColor, QC_RATE_HIGH_THRESHOLD, QC_RATE_MEDIUM_THRESHOLD } from "@/lib/qc";
 import { useFactoryBrainLiveStore } from "@/store/factoryBrain.live.store";
 import type {
   QcResponse,
@@ -28,15 +29,11 @@ import type {
 
 type SortKey = "operation" | "line" | "defect" | "rework";
 
-function rateColor(rate: number): string {
-  if (rate >= 6) return "text-[var(--risk-high)]";
-  if (rate >= 3) return "text-[var(--risk-medium)]";
-  return "text-[var(--risk-low)]";
-}
+const rateColor = qcRateColor;
 
 function rateBg(rate: number): string {
-  if (rate >= 6) return "bg-risk-high/15 border-risk-high/30 text-[var(--risk-high)]";
-  if (rate >= 3) return "bg-risk-medium/15 border-risk-medium/30 text-[var(--risk-medium)]";
+  if (rate >= QC_RATE_HIGH_THRESHOLD) return "bg-risk-high/15 border-risk-high/30 text-[var(--risk-high)]";
+  if (rate >= QC_RATE_MEDIUM_THRESHOLD) return "bg-risk-medium/15 border-risk-medium/30 text-[var(--risk-medium)]";
   return "bg-risk-low/15 border-risk-low/30 text-[var(--risk-low)]";
 }
 
@@ -47,9 +44,7 @@ function reworkRatePct(c: QcOperationStats): number {
   return c.totals.inspected > 0 ? (c.totals.rework / c.totals.inspected) * 100 : 0;
 }
 
-function operationLabel(op: string): string {
-  return op.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+const operationLabel = qcOperationLabel;
 
 export default function QcPage() {
   const { t, locale } = useT();

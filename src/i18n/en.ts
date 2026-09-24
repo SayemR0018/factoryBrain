@@ -62,7 +62,10 @@ export const en = {
     colDefect: "Defect",
     colDefectRate: "Defect %",
     colReworkRate: "Rework %",
-    generated: "Generated {rel}"
+    generated: "Generated {rel}",
+    summaryLabel: "Top defect —",
+    summaryLoading: "loading…",
+    summaryOpen: "Open QC grid"
   },
   nav: {
     overview: "Overview",

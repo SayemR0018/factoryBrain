@@ -7,8 +7,8 @@ import { Topbar } from "@/components/layout/Topbar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { MobileShell } from "@/components/layout/MobileShell";
 import { ToastProvider } from "@/components/ui/Toast";
-import { businessService } from "@/services/business.service";
 import { useAppStore } from "@/store/app.store";
+import { useBusinessStore } from "@/store/business.store";
 import { useMounted } from "@/lib/persist";
 import { Tour } from "@/components/tour/Tour";
 import { Suspense } from "react";
@@ -19,6 +19,11 @@ function Inner({ children }: { children: React.ReactNode }) {
   const resetRequired = useAppStore((s) => s.resetRequired);
   const applyTheme = useAppStore((s) => s.applyTheme);
   const mounted = useMounted();
+  // Subscribe (don't getState()) so the gate re-runs the moment
+  // onboardingComplete flips — avoids a Welcome→/app→Welcome bounce
+  // under React 18 Strict Mode where a one-render-stale getState() read
+  // could redirect right after the click handler set it to true.
+  const onboarded = useBusinessStore((s) => s.onboardingComplete);
 
   useEffect(() => {
     applyTheme();
@@ -31,10 +36,10 @@ function Inner({ children }: { children: React.ReactNode }) {
       router.replace("/onboarding/welcome");
       return;
     }
-    if (!businessService.isOnboarded()) {
+    if (!onboarded) {
       router.replace("/onboarding/welcome");
     }
-  }, [router, resetRequired, mounted]);
+  }, [router, resetRequired, mounted, onboarded]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-canvas">

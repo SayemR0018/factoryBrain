@@ -13,7 +13,7 @@ import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
 import { SimulatedPill } from "@/components/ui/Status";
 import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
-import { QcDefectsPanel } from "@/components/overview/QcDefectsPanel";
+import { QcSummary } from "@/components/overview/QcSummary";
 import { BriefCard } from "@/components/overview/BriefCard";
 import { metricService } from "@/services/metric.service";
 import { insightService } from "@/services/insight.service";
@@ -190,12 +190,12 @@ export default function OverviewPage() {
       </div>
 
       {/* Morning brief — deterministic demo summary (no LLM). */}
-      <div className="mt-6">
+      <div className="mt-4">
         <BriefCard />
       </div>
 
       <Panel
-        className="mt-6"
+        className="mt-4"
         title={t("overview.businessHealth")}
         subtitle={t("overview.trend")}
       >
@@ -231,7 +231,7 @@ export default function OverviewPage() {
 
       {/* Live sensor tick — extends the page without touching existing layout. */}
       <Panel
-        className="mt-6"
+        className="mt-4"
         title={t("overview.tickTitle")}
         subtitle={
           snapshot
@@ -316,18 +316,13 @@ export default function OverviewPage() {
         <LineBoardPanel />
       </div>
 
-      {/* QC defects & rework — top operations, defect/rework rates, Flag issue
-          button to create an Insight via /api/qc/flag. Auto-refreshes with
-          the shared sim tick. */}
-      <div className="mt-6">
-        <QcDefectsPanel />
-      </div>
+      <QcSummary />
 
       {/* Deterministic compressor duty recommendation. Explicit
           Simulated / not-RL labeling so the demo surface never reads as a
           learned policy. */}
       <Panel
-        className="mt-6"
+        className="mt-4"
         title={t("overview.energyTitle")}
         subtitle={
           energyRec
@@ -351,7 +346,7 @@ export default function OverviewPage() {
         )}
       </Panel>
 
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Panel className="lg:col-span-2" title={t("overview.importantToday")} subtitle="Top insights from the workforce">
           <div data-tour="overview-important">
             {pinned.length === 0 && <p className="text-caption text-fg-tertiary">{t("overview.nothingImportant")}</p>}
@@ -415,7 +410,7 @@ export default function OverviewPage() {
         </Panel>
       </div>
 
-      <Panel className="mt-6" title={t("overview.recentActivity")} subtitle="">
+      <Panel className="mt-4" title={t("overview.recentActivity")} subtitle="">
         {activity.length === 0 ? (
           <p className="text-caption text-fg-tertiary">{t("overview.noActivity")}</p>
         ) : (
@@ -445,7 +440,7 @@ export default function OverviewPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-6 surface-2 p-4 flex items-start gap-3"
+          className="mt-4 surface-2 p-4 flex items-start gap-3"
         >
           <span className="size-7 rounded-md bg-[var(--accent-soft)] border border-[var(--accent-border)] flex items-center justify-center shrink-0 text-accent">
             <PlugZap size={14} />
@@ -461,7 +456,7 @@ export default function OverviewPage() {
       )}
 
       {health.dhakaDip.pct < -0.05 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 surface-2 p-4 flex items-start gap-3">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 surface-2 p-4 flex items-start gap-3">
           <span className="size-7 rounded-md bg-[var(--risk-medium-soft)] border border-[var(--risk-medium-border)] flex items-center justify-center shrink-0">
             <AlertTriangle size={14} className="text-[var(--risk-medium)]" />
           </span>

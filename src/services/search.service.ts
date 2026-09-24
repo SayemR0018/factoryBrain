@@ -66,6 +66,18 @@ const PAGE_HINTS_EN: Record<string, { title: string; hint: string; titleBn: stri
     titleBn: "অন্তর্দৃষ্টি",
     hintBn: "পর্যায়, এজেন্ট ও ঝুঁকি দিয়ে ফিল্টার"
   },
+  "/app/qc": {
+    title: "Quality Control",
+    hint: "Defect and rework rates by operation and line",
+    titleBn: "মান নিয়ন্ত্রণ",
+    hintBn: "অপারেশন ও লাইন অনুযায়ী ত্রুটি ও রি-ওয়ার্ক হার"
+  },
+  "/app/vision": {
+    title: "Vision",
+    hint: "Camera-based line diagnostics and defect detection",
+    titleBn: "ভিশন",
+    hintBn: "ক্যামেরা-ভিত্তিক লাইন ডায়াগনস্টিক ও ত্রুটি সনাক্তকরণ"
+  },
   "/app/agents": {
     title: "Workforce",
     hint: "The three agents assembled for your factory",
@@ -86,9 +98,9 @@ const PAGE_HINTS_EN: Record<string, { title: string; hint: string; titleBn: stri
   },
   "/app/integrations": {
     title: "Integrations",
-    hint: "Connect Sheets, Shopify, WhatsApp, CSV…",
+    hint: "Connect Sheets, WhatsApp, CSV, Documents…",
     titleBn: "ইন্টিগ্রেশন",
-    hintBn: "Sheets, Shopify, WhatsApp, CSV সংযুক্ত করুন…"
+    hintBn: "Sheets, WhatsApp, CSV, Documents সংযুক্ত করুন…"
   },
   "/app/settings": {
     title: "Settings",
@@ -113,16 +125,12 @@ const SETTINGS: Array<{ id: string; title: string; hint: string; titleBn: string
   { id: "settings:notifications", title: "Notifications", hint: "Channels and digest time", titleBn: "বিজ্ঞপ্তি", hintBn: "চ্যানেল ও ডাইজেস্টের সময়", section: "notifications" },
   { id: "settings:exportConfig", title: "Export configuration", hint: "Download a JSON snapshot", titleBn: "কনফিগারেশন এক্সপোর্ট", hintBn: "JSON স্ন্যাপশট ডাউনলোড", section: "data" },
   { id: "settings:importConfig", title: "Import configuration", hint: "Restore from a JSON snapshot", titleBn: "কনফিগারেশন ইম্পোর্ট", hintBn: "JSON স্ন্যাপশট থেকে পুনরুদ্ধার", section: "data" },
-  { id: "settings:restartTour", title: "Restart product tour", hint: "Replay the onboarding tour", titleBn: "প্রোডাক্ট ট্যুর পুনরায় শুরু", hintBn: "অনবোর্ডিং ট্যুর আবার দেখান", section: "advanced" },
   { id: "settings:resetDemo", title: "Reset demo", hint: "Clear everything and start over", titleBn: "ডেমো রিসেট", hintBn: "সবকিছু মুছে আবার শুরু", section: "advanced" }
 ];
 
 const SOURCE_LABELS: Record<string, { en: string; bn: string; hintEn: string; hintBn: string }> = {
   sheets: { en: "Google Sheets", bn: "গুগল শীটস", hintEn: "Spreadsheet import", hintBn: "স্প্রেডশীট ইম্পোর্ট" },
-  shopify: { en: "Shopify", bn: "শপিফাই", hintEn: "Products · orders · customers", hintBn: "পণ্য · অর্ডার · ক্রেতা" },
   whatsapp: { en: "WhatsApp", bn: "হোয়াটসঅ্যাপ", hintEn: "Conversations", hintBn: "কথোপকথন" },
-  facebook: { en: "Facebook", bn: "ফেসবুক", hintEn: "Orders · customers", hintBn: "অর্ডার · ক্রেতা" },
-  instagram: { en: "Instagram", bn: "ইনস্টাগ্রাম", hintEn: "Orders · customers", hintBn: "অর্ডার · ক্রেতা" },
   csv: { en: "CSV / Excel", bn: "CSV / এক্সেল", hintEn: "File upload or Drive link", hintBn: "ফাইল আপলোড বা ড্রাইভ লিঙ্ক" },
   documents: { en: "Documents", bn: "নথি", hintEn: "Policies · supplier contracts", hintBn: "নীতি · সরবরাহকারী চুক্তি" }
 };

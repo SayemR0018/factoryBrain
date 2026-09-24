@@ -88,7 +88,8 @@ async function main() {
     "src/app/api/settings/llm/route.ts",
     "src/services/lineBoard.server.ts",
     "src/app/api/line-board/route.ts",
-    "src/app/api/line-board/refresh/route.ts"
+    "src/app/api/line-board/refresh/route.ts",
+    "src/components/overview/LineBoardPanel.tsx"
   ]) {
     try { await read(f); assert(true, f); } catch { assert(false, f); }
   }
@@ -160,6 +161,38 @@ async function main() {
   assert(lineBoardRefresh.includes('export async function POST'), "line-board/refresh: POST handler present");
   assert(lineBoardRefresh.includes("advanceSim"), "line-board/refresh: advances sim before reading");
   assert(lineBoardRefresh.includes("buildLineBoard"), "line-board/refresh: returns buildLineBoard payload");
+
+  // LineBoardPanel — wiring + i18n keys.
+  const lineBoardPanel = await read("src/components/overview/LineBoardPanel.tsx");
+  assert(lineBoardPanel.includes('export function LineBoardPanel'), "LineBoardPanel: component exported");
+  assert(lineBoardPanel.includes('"/api/line-board"'), "LineBoardPanel: fetches /api/line-board");
+  assert(lineBoardPanel.includes("useFactoryBrainLiveStore"), "LineBoardPanel: subscribes to live tick store");
+  assert(lineBoardPanel.includes('data-testid="line-board"'), "LineBoardPanel: smoke-visible testid present");
+  assert(lineBoardPanel.includes('Simulated'), "LineBoardPanel: keeps simulated label visible");
+  const overviewPage = await read("src/app/app/page.tsx");
+  assert(overviewPage.includes("<LineBoardPanel"), "overview: mounts <LineBoardPanel />");
+  assert(overviewPage.includes("judge-walkthrough"), "overview: keeps demo path strip");
+  for (const k of [
+    "lineBoard:",
+    "lineBoardSubtitle:",
+    "colLine:",
+    "colBottleneck:",
+    "colEff:",
+    "colSah:",
+    "colWip:",
+    "colNpt:",
+    "bottleneckGreen:",
+    "bottleneckAmber:",
+    "bottleneckRed:",
+    "effShort:",
+    "refreshAria:",
+    "retry:",
+    "loadFailed:",
+    "loadFailedBody:"
+  ]) {
+    assert(en.includes(k), `i18n en: has overview.${k.replace(/:$/, "")}`);
+    assert(bn.includes(k), `i18n bn: has overview.${k.replace(/:$/, "")}`);
+  }
 
   // 8. Brand naming wired through i18n + layout metadata.
   assert(en.includes('name: "BunonBrain"'), "en: app.name is BunonBrain");

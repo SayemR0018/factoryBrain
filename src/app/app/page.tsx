@@ -11,6 +11,7 @@ import { Sparkline } from "@/components/ui/Sparkline";
 import { StageBadge, RiskPill } from "@/components/ui/StatusPill";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
+import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
 import { metricService } from "@/services/metric.service";
 import { insightService } from "@/services/insight.service";
 import { approvalService } from "@/services/approval.service";
@@ -307,6 +308,12 @@ export default function OverviewPage() {
           </div>
         )}
       </Panel>
+
+      {/* Live line board — six lines with traffic-light bottleneck, efficiency
+          vs SAH, WIP, NPT. Auto-refreshes when the Simulate tick above fires. */}
+      <div className="mt-4">
+        <LineBoardPanel />
+      </div>
 
       {/* Deterministic compressor duty recommendation. Explicit
           Simulated / not-RL labeling so the demo surface never reads as a

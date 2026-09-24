@@ -452,6 +452,12 @@ async function runSettingsLlmRuntimeCheck() {
   const base = `http://127.0.0.1:${port}`;
   const FAKE_KEY = "smoke-fake-key-DO-NOT-USE-0123456789abcdef";
 
+  // If a previous smoke run aborted before cleanup ran (e.g. an assertion
+  // failed mid-test), there can be a stale `next start` bound to the test
+  // port that retains `LLM_PROVIDER=openai` in its process memory. Kill
+  // any pre-existing listener so the new server starts from a clean slate.
+  await killListenersOnPort(port);
+
   // The dev-mode route upserts to .env.local. Back up and remove any
   // existing copy so the test starts clean and we can restore it after.
   const envLocal = path.join(root, ".env.local");
@@ -465,16 +471,19 @@ async function runSettingsLlmRuntimeCheck() {
   // Start `next start`. We force NODE_ENV=production so the route hits
   // the "process-only" branch (no file writes). Stdout/stderr are
   // discarded — never let the key land in build logs.
+  // detached:true + process.kill(-pid) lets us reap the entire process
+  // group (npx → sh → next-server) even if smoke aborts mid-test.
   const server = spawn("npx", ["next", "start", "-p", String(port)], {
     cwd: root,
+    detached: true,
     env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
     stdio: ["ignore", "ignore", "ignore"]
   });
 
   async function cleanup() {
-    try { server.kill("SIGTERM"); } catch {}
+    try { process.kill(-server.pid, "SIGTERM"); } catch {}
     await new Promise((r) => setTimeout(r, 250));
-    try { server.kill("SIGKILL"); } catch {}
+    try { process.kill(-server.pid, "SIGKILL"); } catch {}
     if (hadEnvLocal && backup !== null) {
       await fs.writeFile(envLocal, backup);
     } else if (!hadEnvLocal) {
@@ -489,24 +498,41 @@ async function runSettingsLlmRuntimeCheck() {
     await waitForServer(base);
     const headers = { "Content-Type": "application/json" };
 
-    // Initial GET — neither key nor env var name should appear.
-    const initial = await getJson(base + "/api/settings/llm");
+    // Initial GET — neither key nor env var name should appear, status is
+    // demo mode with no provider / model, persistence flag is one of the
+    // three valid options. Also assert Cache-Control: no-store so the
+    // status never gets cached by intermediaries.
+    const initialRaw = await fetch(base + "/api/settings/llm", { cache: "no-store" });
+    assertNoStore(initialRaw, "settings/llm GET (initial)");
+    const initial = await initialRaw.json();
     assertNoSecret(initial, FAKE_KEY, "GET (initial)");
+    assert(initial.configured === false, "settings/llm: initial configured === false (no env)");
+    assert(initial.mode === "demo", "settings/llm: initial mode === demo");
+    assert(initial.provider === null, "settings/llm: initial provider === null");
+    assert(initial.model === null, "settings/llm: initial model === null");
+    assert(["env.local", "process", "vercel_only"].includes(initial.persistence), `settings/llm: persistence ∈ {env.local,process,vercel_only}, got ${initial.persistence}`);
+    assert(!("apiKey" in initial), "settings/llm: GET response has no apiKey key");
+    assert(!("LLM_API_KEY" in initial), "settings/llm: GET response has no LLM_API_KEY key");
 
     // POST a clearly fake key.
     const fakeBody = JSON.stringify({ provider: "openai", apiKey: FAKE_KEY, model: "gpt-6-luna" });
     const postRes = await fetch(base + "/api/settings/llm", { method: "POST", headers, body: fakeBody });
+    assertNoStore(postRes, "settings/llm POST");
     const postText = await postRes.text();
     assert(postRes.status === 200, `POST settings/llm returned 200 (got ${postRes.status})`);
     assert(!postText.includes(FAKE_KEY), "POST response text does not contain the fake key");
-    assert(!postText.includes("apiKey"), "POST response text does not contain the substring 'apiKey'");
+    // The route's notice string in production mode legitimately mentions
+    // the env-var name as guidance. We assert on the parsed JSON shape —
+    // never any apiKey-shaped field or value.
     const postParsed = JSON.parse(postText);
-    assert(postParsed.apiKey === undefined, "POST response JSON has no apiKey field");
+    assertNoSecret(postParsed, FAKE_KEY, "POST response");
     assert(postParsed.configured === true, "POST sets configured: true after fake key saved");
 
     // GET again — status should now show configured=true, and still
     // never echo the key. Also assert the env-var name isn't returned.
-    const after = await getJson(base + "/api/settings/llm");
+    const afterRaw = await fetch(base + "/api/settings/llm", { cache: "no-store" });
+    assertNoStore(afterRaw, "settings/llm GET (after POST)");
+    const after = await afterRaw.json();
     assertNoSecret(after, FAKE_KEY, "GET (after POST)");
     assert(after.configured === true, "GET after POST reports configured: true");
     assert(after.mode === "live", "GET after POST reports mode: live");
@@ -518,32 +544,61 @@ async function runSettingsLlmRuntimeCheck() {
       method: "POST", headers, body: JSON.stringify({ provider: "openai", clearKey: true })
     });
     assert(clearRes.status === 200, "POST clearKey returned 200");
-    const cleared = await getJson(base + "/api/settings/llm");
+    const clearedRaw = await fetch(base + "/api/settings/llm", { cache: "no-store" });
+    assertNoStore(clearedRaw, "settings/llm GET (after clear)");
+    const cleared = await clearedRaw.json();
     assert(cleared.configured === false, "GET after clearKey reports configured: false");
     assert(cleared.mode === "demo", "GET after clearKey reports mode: demo");
     assertNoSecret(cleared, FAKE_KEY, "GET (after clear)");
 
     // Line-board (improve batch) — runtime contract against the same server.
-    const board = await getJson(base + "/api/line-board");
+    const boardRaw = await fetch(base + "/api/line-board", { cache: "no-store" });
+    assertNoStore(boardRaw, "line-board GET");
+    const board = await boardRaw.json();
     assert(board && Array.isArray(board.rows), "line-board: rows is an array");
     assert(board.rows.length === 6, "line-board: returns 6 rows (line-1..line-6)");
     assert(board.meta && board.meta.simulated === true, "line-board: meta.simulated is true");
     assert(typeof board.meta.source === "string" && /Simulated/.test(board.meta.source), "line-board: meta.source mentions Simulated");
+    assert(typeof board.meta.notes === "string" && board.meta.notes.length > 0, "line-board: meta.notes is a non-empty string");
     assert(typeof board.meta.tick === "number" && board.meta.tick >= 0, "line-board: meta.tick is a non-negative number");
+    assert(typeof board.meta.updatedAt === "string" && board.meta.updatedAt.length > 0, "line-board: meta.updatedAt is set");
+    const seenLineIds = new Set();
     for (const r of board.rows) {
       for (const k of ["lineId", "name", "efficiencyPct", "sahTarget", "sahActual", "wipBundles", "bottleneck", "nptMinutes", "updatedAt"]) {
         assert(r[k] !== undefined, `line-board row ${r.lineId || "?"}: has ${k}`);
       }
+      assert(typeof r.lineId === "string" && /^line-\d+$/.test(r.lineId), `line-board row: lineId matches line-N, got ${r.lineId}`);
+      assert(!seenLineIds.has(r.lineId), `line-board row: lineId ${r.lineId} appears once`);
+      seenLineIds.add(r.lineId);
+      assert(typeof r.name === "string" && r.name.length > 0, `line-board row ${r.lineId}: name is a non-empty string`);
       assert(["green", "amber", "red"].includes(r.bottleneck), `line-board row ${r.lineId}: bottleneck ∈ green/amber/red`);
       assert(r.efficiencyPct >= 0 && r.efficiencyPct <= 100, `line-board row ${r.lineId}: efficiencyPct in 0..100`);
       assert(Number.isInteger(r.sahTarget) && r.sahTarget >= 0 && r.sahTarget <= 100, `line-board row ${r.lineId}: sahTarget is integer 0..100`);
+      assert(Number.isInteger(r.sahActual) && r.sahActual >= 0 && r.sahActual <= 100, `line-board row ${r.lineId}: sahActual is integer 0..100`);
+      assert(r.sahActual === r.efficiencyPct, `line-board row ${r.lineId}: sahActual mirrors efficiencyPct`);
       assert(Number.isInteger(r.wipBundles) && r.wipBundles >= 0, `line-board row ${r.lineId}: wipBundles is integer ≥ 0`);
       assert(Number.isInteger(r.nptMinutes) && r.nptMinutes >= 0, `line-board row ${r.lineId}: nptMinutes is integer ≥ 0`);
+      assert(/^\d{4}-\d{2}-\d{2}T/.test(r.updatedAt), `line-board row ${r.lineId}: updatedAt is ISO 8601`);
     }
+    assert(seenLineIds.size === 6, `line-board: covers all 6 unique lineIds, got ${seenLineIds.size}`);
+
+    // Determinism — two consecutive GETs return identical rows (only
+    // meta.updatedAt + per-row updatedAt are allowed to differ).
+    const board2 = await getJson(base + "/api/line-board");
+    const stripLineBoardTimestamps = (b) => ({
+      ...b,
+      meta: { ...b.meta, updatedAt: "X" },
+      rows: b.rows.map((r) => ({ ...r, updatedAt: "X" }))
+    });
+    assert(
+      JSON.stringify(stripLineBoardTimestamps(board)) === JSON.stringify(stripLineBoardTimestamps(board2)),
+      "line-board: rows + meta are deterministic (only updatedAt may differ)"
+    );
 
     // Refresh should advance tick and return a fresh board.
     const tickBefore = board.meta.tick;
     const refreshRes = await fetch(base + "/api/line-board/refresh", { method: "POST", headers });
+    assertNoStore(refreshRes, "line-board/refresh POST");
     assert(refreshRes.status === 200, "POST /api/line-board/refresh returned 200");
     const refreshed = await refreshRes.json();
     assert(refreshed.meta.tick > tickBefore, `line-board/refresh: tick advances (${tickBefore} → ${refreshed.meta.tick})`);
@@ -556,15 +611,26 @@ async function runSettingsLlmRuntimeCheck() {
     });
     assert(badRes.status === 400, "POST /api/line-board/refresh with bad body returns 400");
 
+    // Re-read line-board AFTER refresh so we have the current tick value
+    // to compare against the brief we fetch below (the brief uses the same
+    // shared sim-state as line-board, so its tick must match the *current*
+    // tick, not the pre-refresh one captured at the top of this test).
+    const boardPostRefreshRaw = await fetch(base + "/api/line-board", { cache: "no-store" });
+    assertNoStore(boardPostRefreshRaw, "line-board GET (post-refresh)");
+    const boardPostRefresh = await boardPostRefreshRaw.json();
+    assert(boardPostRefresh.meta.tick === refreshed.meta.tick, `line-board post-refresh tick (${boardPostRefresh.meta.tick}) matches refresh tick (${refreshed.meta.tick})`);
+
     // Brief — runtime contract + determinism (same inputs → identical JSON).
     // Give Next a generous grace period to compile the freshly-added route.
     let brief1 = null;
     let lastStatus = 0;
+    let lastHeaders = null;
     const briefDeadline = Date.now() + 30_000;
     while (Date.now() < briefDeadline) {
       try {
         const r = await fetch(base + "/api/brief/morning", { cache: "no-store" });
         lastStatus = r.status;
+        lastHeaders = r.headers;
         if (r.status === 200) {
           brief1 = await r.json();
           break;
@@ -575,6 +641,10 @@ async function runSettingsLlmRuntimeCheck() {
       await new Promise((r2) => setTimeout(r2, 500));
     }
     assert(brief1 !== null, `brief: GET /api/brief/morning returned 200 within grace period (last status ${lastStatus})`);
+    assert(
+      lastHeaders && /no-store/i.test(lastHeaders.get("cache-control") ?? ""),
+      "brief: GET /api/brief/morning sets Cache-Control: no-store"
+    );
     assert(typeof brief1.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(brief1.date), "brief: date is YYYY-MM-DD");
     assert(Array.isArray(brief1.bulletsEn) && brief1.bulletsEn.length >= 1, "brief: bulletsEn is a non-empty array");
     assert(Array.isArray(brief1.bulletsBn) && brief1.bulletsBn.length >= 1, "brief: bulletsBn is a non-empty array");
@@ -585,15 +655,31 @@ async function runSettingsLlmRuntimeCheck() {
     assert(Number.isInteger(brief1.pendingApprovals) && brief1.pendingApprovals >= 0, "brief: pendingApprovals is a non-negative integer");
     if (brief1.topBottleneckLineId !== undefined) {
       assert(typeof brief1.topBottleneckLineId === "string" && /^line-\d+$/.test(brief1.topBottleneckLineId), "brief: topBottleneckLineId is a line id");
+      // Cross-route consistency: the brief's top bottleneck must reference a
+      // row that actually exists in the line-board response.
+      const inBoard = boardPostRefresh.rows.find((r) => r.lineId === brief1.topBottleneckLineId);
+      assert(!!inBoard, `brief: topBottleneckLineId ${brief1.topBottleneckLineId} is present in /api/line-board rows`);
+      if (inBoard) {
+        // The header bullet must mention the same line id.
+        const headerMentionsLine = brief1.bulletsEn[0].includes(inBoard.lineId);
+        assert(headerMentionsLine, `brief: header bullet references top bottleneck ${inBoard.lineId}`);
+      }
     }
     assert(brief1.meta && brief1.meta.simulated === true, "brief: meta.simulated is true");
     assert(typeof brief1.meta.source === "string" && /Simulated/.test(brief1.meta.source), "brief: meta.source mentions Simulated");
+    assert(typeof brief1.meta.notes === "string" && brief1.meta.notes.length > 0, "brief: meta.notes is a non-empty string");
     assert(Number.isInteger(brief1.meta.tick) && brief1.meta.tick >= 0, "brief: meta.tick is a non-negative integer");
     assert(typeof brief1.meta.generatedAt === "string" && brief1.meta.generatedAt.length > 0, "brief: meta.generatedAt is set");
+    assert(
+      brief1.meta.tick === boardPostRefresh.meta.tick,
+      `brief: meta.tick matches /api/line-board meta.tick (${brief1.meta.tick} vs ${boardPostRefresh.meta.tick})`
+    );
 
     // Determinism — two consecutive GETs return identical content (only
     // meta.generatedAt is allowed to differ; bullets/insights/counts are stable).
-    const brief2 = await getJson(base + "/api/brief/morning");
+    const brief2Raw = await fetch(base + "/api/brief/morning", { cache: "no-store" });
+    assertNoStore(brief2Raw, "brief GET (determinism)");
+    const brief2 = await brief2Raw.json();
     const { generatedAt: _g1, ...brief1Stripped } = brief1.meta;
     const { generatedAt: _g2, ...brief2Stripped } = brief2.meta;
     const stable1 = { ...brief1, meta: brief1Stripped };
@@ -603,11 +689,13 @@ async function runSettingsLlmRuntimeCheck() {
     // QC defects — runtime contract + determinism.
     let qc1 = null;
     let qcLastStatus = 0;
+    let qcLastHeaders = null;
     const qcDeadline = Date.now() + 30_000;
     while (Date.now() < qcDeadline) {
       try {
         const r = await fetch(base + "/api/qc/defects", { cache: "no-store" });
         qcLastStatus = r.status;
+        qcLastHeaders = r.headers;
         if (r.status === 200) {
           qc1 = await r.json();
           break;
@@ -617,8 +705,16 @@ async function runSettingsLlmRuntimeCheck() {
       await new Promise((r2) => setTimeout(r2, 500));
     }
     assert(qc1 !== null, `qc: GET /api/qc/defects returned 200 within grace period (last status ${qcLastStatus})`);
+    assert(
+      qcLastHeaders && /no-store/i.test(qcLastHeaders.get("cache-control") ?? ""),
+      "qc: GET /api/qc/defects sets Cache-Control: no-store"
+    );
     assert(Array.isArray(qc1.operations) && qc1.operations.length === 36, `qc: operations has 36 cells (6 ops × 6 lines), got ${qc1.operations?.length}`);
+    const qcSeenLineIds = new Set();
+    const qcSeenOps = new Set();
     for (const op of qc1.operations) {
+      qcSeenLineIds.add(op.lineId);
+      qcSeenOps.add(op.operation);
       assert(op.weeks.length === 8, `qc op ${op.operation}/${op.lineId}: 8 weekly buckets`);
       for (const w of op.weeks) {
         assert(/^\d{4}-\d{2}-\d{2}$/.test(w.weekStart), `qc op ${op.operation}/${op.lineId}: weekStart is YYYY-MM-DD`);
@@ -626,18 +722,53 @@ async function runSettingsLlmRuntimeCheck() {
         assert(w.major + w.minor === w.defects, `qc op ${op.operation}/${op.lineId}/${w.weekStart}: major+minor === defects`);
         assert(w.rework <= w.defects, `qc op ${op.operation}/${op.lineId}/${w.weekStart}: rework ≤ defects`);
       }
+      // Per-cell totals must equal the sum of weekly buckets.
+      const tInspected = op.weeks.reduce((a, w) => a + w.inspected, 0);
+      const tDefects = op.weeks.reduce((a, w) => a + w.defects, 0);
+      const tMajor = op.weeks.reduce((a, w) => a + w.major, 0);
+      const tMinor = op.weeks.reduce((a, w) => a + w.minor, 0);
+      const tRework = op.weeks.reduce((a, w) => a + w.rework, 0);
+      assert(op.totals.inspected === tInspected, `qc op ${op.operation}/${op.lineId}: totals.inspected === Σ weeks.inspected`);
+      assert(op.totals.defects === tDefects, `qc op ${op.operation}/${op.lineId}: totals.defects === Σ weeks.defects`);
+      assert(op.totals.major === tMajor, `qc op ${op.operation}/${op.lineId}: totals.major === Σ weeks.major`);
+      assert(op.totals.minor === tMinor, `qc op ${op.operation}/${op.lineId}: totals.minor === Σ weeks.minor`);
+      assert(op.totals.rework === tRework, `qc op ${op.operation}/${op.lineId}: totals.rework === Σ weeks.rework`);
+    }
+    assert(qcSeenLineIds.size === 6, `qc: covers all 6 lines, got ${qcSeenLineIds.size}`);
+    assert(qcSeenOps.size === 6, `qc: covers all 6 operations, got ${qcSeenOps.size}`);
+    // Cross-route consistency: every QC lineId exists in line-board rows.
+    for (const lid of qcSeenLineIds) {
+      assert(seenLineIds.has(lid), `qc: lineId ${lid} also exists in /api/line-board rows`);
     }
     assert(qc1.topByDefectRate.length === 5, "qc: topByDefectRate has 5 entries");
     assert(qc1.topByReworkRate.length === 5, "qc: topByReworkRate has 5 entries");
     for (const t of qc1.topByDefectRate) {
       assert(t.defectRatePct >= 0 && t.defectRatePct <= 100, `qc top defect ${t.operation}/${t.lineId}: defectRatePct ∈ 0..100`);
+      assert(t.reworkRatePct >= 0 && t.reworkRatePct <= 100, `qc top defect ${t.operation}/${t.lineId}: reworkRatePct ∈ 0..100`);
+      // Each top-row must reference a (op, line) that exists in operations.
+      assert(
+        qc1.operations.some((o) => o.operation === t.operation && o.lineId === t.lineId),
+        `qc top defect ${t.operation}/${t.lineId} exists in operations grid`
+      );
+    }
+    for (const t of qc1.topByReworkRate) {
+      assert(t.reworkRatePct >= 0 && t.reworkRatePct <= 100, `qc top rework ${t.operation}/${t.lineId}: reworkRatePct ∈ 0..100`);
+      assert(t.defectRatePct >= 0 && t.defectRatePct <= 100, `qc top rework ${t.operation}/${t.lineId}: defectRatePct ∈ 0..100`);
+      assert(
+        qc1.operations.some((o) => o.operation === t.operation && o.lineId === t.lineId),
+        `qc top rework ${t.operation}/${t.lineId} exists in operations grid`
+      );
     }
     assert(qc1.meta.simulated === true, "qc: meta.simulated is true");
     assert(/Simulated/i.test(qc1.meta.source), "qc: meta.source mentions Simulated");
     assert(typeof qc1.meta.defectSource === "string" && qc1.meta.defectSource.length > 0, "qc: meta.defectSource is set");
+    assert(typeof qc1.meta.notes === "string" && qc1.meta.notes.length > 0, "qc: meta.notes is a non-empty string");
+    assert(typeof qc1.meta.generatedAt === "string" && qc1.meta.generatedAt.length > 0, "qc: meta.generatedAt is set");
 
     // Determinism — content stable across two calls (only meta.generatedAt may differ).
-    const qc2 = await getJson(base + "/api/qc/defects");
+    const qc2Raw = await fetch(base + "/api/qc/defects", { cache: "no-store" });
+    assertNoStore(qc2Raw, "qc GET (determinism)");
+    const qc2 = await qc2Raw.json();
     const { generatedAt: _qg1, ...qc1Stripped } = qc1.meta;
     const { generatedAt: _qg2, ...qc2Stripped } = qc2.meta;
     const qcStable1 = { ...qc1, meta: qc1Stripped };
@@ -674,6 +805,9 @@ async function runSettingsLlmRuntimeCheck() {
     assert(typeof flagJson.insightId === "string" && flagJson.insightId.length > 0, "qc/flag: response insightId present");
     assert(typeof flagJson.flaggedAt === "string" && flagJson.flaggedAt.length > 0, "qc/flag: response flaggedAt present");
     assert(/^qc-flag-/.test(flagJson.insightId), `qc/flag: insightId has expected prefix, got ${flagJson.insightId}`);
+    const flagText = JSON.stringify(flagJson);
+    assert(!flagText.includes(FAKE_KEY), "qc/flag: response does not contain any leftover secret");
+    assert(!flagText.includes("apiKey"), "qc/flag: response does not contain the substring 'apiKey'");
 
     // Idempotence — repeating the same flag with the same (op, line) returns
     // the same insight id (not a new one). This is the contract the dataset
@@ -712,9 +846,40 @@ async function getJson(url) {
 function assertNoSecret(obj, fakeKey, label) {
   const text = JSON.stringify(obj);
   assert(!text.includes(fakeKey), `${label}: response JSON does not contain the fake key`);
-  assert(!text.includes("apiKey"), `${label}: response JSON does not contain the substring 'apiKey'`);
-  assert(!text.includes("LLM_API_KEY"), `${label}: response JSON does not contain the substring 'LLM_API_KEY'`);
+  // The response shape deliberately never has a field whose NAME is
+  // "apiKey" or "LLM_API_KEY", so we assert on parsed-object shape rather
+  // than the raw text (the route's notice strings legitimately reference
+  // the env-var name as part of guidance).
   assert(obj.apiKey === undefined, `${label}: parsed object has no apiKey field`);
+  assert(obj.LLM_API_KEY === undefined, `${label}: parsed object has no LLM_API_KEY field`);
+  // And the json MUST NOT carry anything resembling an apiKey-shaped pair
+  // — i.e. no key ending in "ApiKey"/"API_KEY" with a non-empty value.
+  if (obj && typeof obj === "object") {
+    for (const k of Object.keys(obj)) {
+      if (/api_?key/i.test(k)) {
+        assert(obj[k] === undefined || obj[k] === null || obj[k] === "",
+          `${label}: parsed object has no apiKey-shaped field "${k}" with a value`);
+      }
+    }
+  }
+}
+
+function assertNoStore(response, label) {
+  const cc = response.headers.get("cache-control") ?? "";
+  assert(/no-store/i.test(cc), `${label}: response sets Cache-Control: no-store (got "${cc}")`);
+}
+
+async function killListenersOnPort(port) {
+  // Best-effort: use fuser to kill any process listening on the given TCP
+  // port. fuser is on most Linux systems; if it's missing we silently move
+  // on — the spawn() below will fail loudly with EADDRINUSE.
+  try {
+    const { spawnSync } = await import("node:child_process");
+    spawnSync("fuser", ["-k", "-n", "tcp", String(port)], { stdio: "ignore" });
+    await new Promise((r) => setTimeout(r, 200));
+  } catch {
+    // ignore — best effort
+  }
 }
 
 async function waitForServer(base) {

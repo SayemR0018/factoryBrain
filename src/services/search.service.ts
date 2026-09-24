@@ -98,9 +98,9 @@ const PAGE_HINTS_EN: Record<string, { title: string; hint: string; titleBn: stri
   },
   "/app/integrations": {
     title: "Integrations",
-    hint: "Connect Sheets, WhatsApp, CSV, Documents…",
+    hint: "RFID · machine telemetry · energy · Documents",
     titleBn: "ইন্টিগ্রেশন",
-    hintBn: "Sheets, WhatsApp, CSV, Documents সংযুক্ত করুন…"
+    hintBn: "RFID · মেশিন টেলিমেট্রি · এনার্জি · নথি"
   },
   "/app/settings": {
     title: "Settings",
@@ -115,17 +115,15 @@ const SETTINGS: Array<{ id: string; title: string; hint: string; titleBn: string
   { id: "settings:theme", title: "Theme", hint: "Light, dark, or system", titleBn: "থিম", hintBn: "হালকা, গাঢ় বা সিস্টেম", section: "appearance" },
   { id: "settings:density", title: "Density", hint: "Comfortable or compact layout", titleBn: "ঘনত্ব", hintBn: "আরামদায়ক বা কম্প্যাক্ট", section: "appearance" },
   { id: "settings:businessName", title: "Business name", hint: "Shown in greetings and exports", titleBn: "ব্যবসার নাম", hintBn: "অভিবাদন ও এক্সপোর্টে দেখানো হয়", section: "profile" },
-  { id: "settings:industry", title: "Industry", hint: "What sector you operate in", titleBn: "শিল্প", hintBn: "আপনি কোন খাতে", section: "profile" },
   { id: "settings:city", title: "City", hint: "Headquarters location", titleBn: "শহর", hintBn: "সদর দপ্তরের অবস্থান", section: "profile" },
   { id: "settings:agentMode", title: "Per-agent autonomy", hint: "Auto, approval, paused", titleBn: "প্রতি এজেন্ট স্বায়ত্তশাসন", hintBn: "স্বয়ংক্রিয়, অনুমোদন, বিরত", section: "agents" },
   { id: "settings:globalPause", title: "Pause all agents", hint: "Stops every agent immediately", titleBn: "সব এজেন্ট বিরত", hintBn: "প্রতিটি এজেন্ট সাথে সাথে বন্ধ", section: "agents" },
   { id: "settings:thresholds", title: "Risk thresholds", hint: "Order value, discount, spend, volume", titleBn: "ঝুঁকি সীমা", hintBn: "অর্ডার মূল্য, ছাড়, খরচ, ভলিউম", section: "risk" },
   { id: "settings:autoApprove", title: "Auto-approve below", hint: "Skip approval under a risk tier", titleBn: "নিচে স্বয়ংক্রিয় অনুমোদন", hintBn: "একটি ঝুঁকি স্তরের নিচে অনুমোদন এড়িয়ে যান", section: "risk" },
   { id: "settings:approvalGate", title: "Approval gate", hint: "Which risk tiers need approval", titleBn: "অনুমোদন গেট", hintBn: "কোন ঝুঁকি স্তরের অনুমোদন প্রয়োজন", section: "risk" },
-  { id: "settings:notifications", title: "Notifications", hint: "Channels and digest time", titleBn: "বিজ্ঞপ্তি", hintBn: "চ্যানেল ও ডাইজেস্টের সময়", section: "notifications" },
   { id: "settings:exportConfig", title: "Export configuration", hint: "Download a JSON snapshot", titleBn: "কনফিগারেশন এক্সপোর্ট", hintBn: "JSON স্ন্যাপশট ডাউনলোড", section: "data" },
   { id: "settings:importConfig", title: "Import configuration", hint: "Restore from a JSON snapshot", titleBn: "কনফিগারেশন ইম্পোর্ট", hintBn: "JSON স্ন্যাপশট থেকে পুনরুদ্ধার", section: "data" },
-  { id: "settings:resetDemo", title: "Reset demo", hint: "Clear everything and start over", titleBn: "ডেমো রিসেট", hintBn: "সবকিছু মুছে আবার শুরু", section: "advanced" }
+  { id: "settings:resetDemo", title: "Reset demo", hint: "Clear everything and start over", titleBn: "ডেমো রিসেট", hintBn: "সবকিছু মুছে আবার শুরু", section: "dataReset" }
 ];
 
 const SOURCE_LABELS: Record<string, { en: string; bn: string; hintEn: string; hintBn: string }> = {
@@ -302,8 +300,9 @@ export const searchService = {
       }
     }
 
-    // Integrations (sources)
+    // Integrations (sources) — skip out_of_scope social noise in ⌘K
     for (const s of sources) {
+      if (s.category === "out_of_scope") continue;
       const lbl = SOURCE_LABELS[s.id];
       if (!lbl) continue;
       out.push({

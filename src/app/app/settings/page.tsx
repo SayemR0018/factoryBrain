@@ -23,13 +23,11 @@ import { riskService } from "@/services/risk.service";
 import { Panel } from "@/components/ui/Panel";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Chip } from "@/components/ui/Chip";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { formatBDT } from "@/lib/format";
 import type { Locale } from "@/i18n/registry";
 import { cn } from "@/lib/cn";
-import { goals } from "@/data/goals";
 import { agentService } from "@/services/agent.service";
 
 // Five curated sections. Anything that was previously under
@@ -169,18 +167,11 @@ function ProfileSection({ flash, savedKey }: { flash: (k: string) => void; saved
   const profile = useBusinessStore((s) => s.profile);
   const setProfile = useBusinessStore((s) => s.setProfile);
 
-  const goalOptions = useMemo(() => goals.slice(0, 7).map((g) => g.label), []);
-
-  function toggleGoal(label: string) {
-    const cur = profile.goals.includes(label);
-    const next = cur ? profile.goals.filter((g) => g !== label) : [...profile.goals, label].slice(0, 3);
-    setProfile({ goals: next });
-    flash("profile");
-  }
-
+  // RMG demo Profile: plant name + city only. Language lives under Appearance.
+  // Store still keeps industry / currency / goals for seeds — UI-hidden this pass.
   return (
     <Panel title={t("settings.businessProfile")}>
-      <Row label={t("settings.businessName")} hint="Shown in greetings and exports">
+      <Row label={t("settings.businessName")} hint="Plant / company name shown in greetings">
         <Input
           value={profile.businessName}
           onChange={(e) => setProfile({ businessName: e.target.value })}
@@ -193,35 +184,6 @@ function ProfileSection({ flash, savedKey }: { flash: (k: string) => void; saved
           onChange={(e) => setProfile({ city: e.target.value })}
           onBlur={() => flash("profile")}
         />
-      </Row>
-      <Row label={t("settings.currency")} hint="ISO code, used in exports">
-        <Input
-          value={profile.currency}
-          onChange={(e) => setProfile({ currency: e.target.value.toUpperCase().slice(0, 3) })}
-          onBlur={() => flash("profile")}
-        />
-      </Row>
-      <Row label={t("settings.timezone")}>
-        <Input
-          value={profile.timezone}
-          onChange={(e) => setProfile({ timezone: e.target.value })}
-          onBlur={() => flash("profile")}
-        />
-      </Row>
-      <Row label={t("settings.goals")} hint="Pick up to three">
-        <div className="flex flex-wrap gap-1.5">
-          {goalOptions.map((g) => (
-            <Chip
-              key={g}
-              active={profile.goals.includes(g)}
-              onClick={() => toggleGoal(g)}
-              disabled={!profile.goals.includes(g) && profile.goals.length >= 3}
-              ariaLabel={g}
-            >
-              {g}
-            </Chip>
-          ))}
-        </div>
       </Row>
       <div className="mt-3 flex justify-end"><Saved savedKey={savedKey} id="profile" /></div>
     </Panel>

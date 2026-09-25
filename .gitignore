@@ -6,6 +6,12 @@
 *.log
 tsconfig.tsbuildinfo
 
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+
 # puku-cli harness state — local-only, auto-mutated by the CLI tool.
 # Everything under `.puku-cli/` is per-machine / per-install state:
 #   * `settings.local.json` records per-machine behaviour (allowed commands,

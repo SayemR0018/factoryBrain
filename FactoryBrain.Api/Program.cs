@@ -102,14 +102,14 @@ builder.Services.AddScoped<IBriefService,      BriefService>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
-// ─── CORS — Next.js dev/preview origins ────────────────────────────────────
+// ─── CORS — Next.js dev origins (frontend proxy host) ──────────────────────
+// Spec: origins http://localhost:3000 and http://127.0.0.1:3000,
+// any method, any header, credentials.
 builder.Services.AddCors(o =>
     o.AddPolicy("NextDev", p =>
         p.WithOrigins(
                "http://localhost:3000",
-               "http://127.0.0.1:3000",
-               "http://localhost:3001",
-               "http://127.0.0.1:3001")
+               "http://127.0.0.1:3000")
          .AllowAnyHeader()
          .AllowAnyMethod()
          .AllowCredentials()));

@@ -9,18 +9,21 @@ const nextConfig = {
   // Every /api/* request from client components is transparently proxied to
   // the .NET 9 backend. NO frontend code change is required.
   //
-  // Override the backend URL by setting the DOTNET_API_URL env var at runtime
-  // (default: http://localhost:5000).
+  // Override the backend URL via NEXT_PUBLIC_API_URL (preferred) or
+  // DOTNET_API_URL (legacy fallback). Default: http://localhost:5000.
   //
   // Legacy Next.js App Router route handlers that previously resolved /api/*
-  // live under src/app/_api_legacy/** and are intentionally unreachable.
+  // live under src/_legacy_api/** and are intentionally unreachable (the
+  // underscore prefix prevents Next.js from mounting them as routes).
   async rewrites() {
+    const target =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.DOTNET_API_URL ||
+      'http://localhost:5000';
     return [
       {
         source: '/api/:path*',
-        destination: process.env.DOTNET_API_URL
-          ? `${process.env.DOTNET_API_URL}/api/:path*`
-          : 'http://localhost:5000/api/:path*',
+        destination: `${target}/api/:path*`,
       },
     ];
   },

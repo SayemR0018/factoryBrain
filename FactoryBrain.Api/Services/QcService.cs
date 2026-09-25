@@ -14,9 +14,8 @@ public sealed class QcService : IQcService
 
     private readonly FactoryBrainDbContext _db;
     private readonly IFloorAlertService _alerts;
-    private readonly IAgentService _agents;
-    public QcService(FactoryBrainDbContext db, IFloorAlertService alerts, IAgentService agents)
-    { _db = db; _alerts = alerts; _agents = agents; }
+    public QcService(FactoryBrainDbContext db, IFloorAlertService alerts)
+    { _db = db; _alerts = alerts; }
 
     public async Task<QcDefectsResponse> BuildAsync(CancellationToken ct)
     {

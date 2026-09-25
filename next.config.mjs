@@ -6,25 +6,22 @@ const nextConfig = {
   },
 
   // ── Frontend ↔ ASP.NET Core bridge ──────────────────────────────────────────
-  // Every /api/* request from the existing src/app/api/** route handlers and
-  // every fetch() inside the components is transparently proxied to the .NET
-  // backend. NO frontend code change is required.
+  // Every /api/* request from client components is transparently proxied to
+  // the .NET 9 backend. NO frontend code change is required.
   //
-  // Override the backend URL by setting the BACKEND_URL env var at runtime
+  // Override the backend URL by setting the DOTNET_API_URL env var at runtime
   // (default: http://localhost:5000).
+  //
+  // Legacy Next.js App Router route handlers that previously resolved /api/*
+  // live under src/app/_api_legacy/** and are intentionally unreachable.
   async rewrites() {
-    const target = process.env.BACKEND_URL || "http://localhost:5000";
     return [
       {
-        source: "/api/:path*",
-        destination: `${target}/api/:path*`
+        source: '/api/:path*',
+        destination: process.env.DOTNET_API_URL
+          ? `${process.env.DOTNET_API_URL}/api/:path*`
+          : 'http://localhost:5000/api/:path*',
       },
-      // Health is also exposed via the proxy so smoke tests from the browser
-      // get the same CORS-friendly host as the JSON API.
-      {
-        source: "/health",
-        destination: `${target}/health`
-      }
     ];
   },
   // `src/services/rag/vector-store.ts` (and friends) lazy-resolves

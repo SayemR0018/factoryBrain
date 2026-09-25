@@ -7,12 +7,12 @@ namespace FactoryBrain.Api.Controllers;
 [Route("api/agents")]
 public class AgentsController : ControllerBase
 {
-    private readonly IAgentService _svc;
-    public AgentsController(IAgentService svc) { _svc = svc; }
+    private readonly IAgentRunService _svc;
+    public AgentsController(IAgentRunService svc) { _svc = svc; }
 
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
-        => Ok(await _svc.Roster());
+        => Ok(await _svc.RosterAsync(ct));
 
     [HttpPost("{agentId}/run")]
     public async Task<IActionResult> Run([FromRoute] string agentId, CancellationToken ct)

@@ -2,6 +2,7 @@ using FactoryBrain.Api.Data;
 using FactoryBrain.Api.Domain.Entities;
 using FactoryBrain.Api.Domain.Enums;
 using FactoryBrain.Api.Dtos.LineBoard;
+using FactoryBrain.Api.Dtos.Sensors;
 using FactoryBrain.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 

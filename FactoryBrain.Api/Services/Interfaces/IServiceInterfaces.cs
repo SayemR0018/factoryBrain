@@ -62,10 +62,10 @@ public interface ILlmSettingsService
     LlmSettingsResponse Update(LlmSettingsRequest req);
 }
 
-public interface IAgentService
+public interface IAgentRunService
 {
     Task<AgentRunResponse> RunAsync(string agentId, CancellationToken ct);
-    IReadOnlyList<AgentDefinition> Roster();
+    Task<IReadOnlyList<AgentDefinition>> RosterAsync(CancellationToken ct = default);
 }
 
 public interface IRagService

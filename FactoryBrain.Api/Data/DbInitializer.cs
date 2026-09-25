@@ -13,6 +13,14 @@ namespace FactoryBrain.Api.Data;
 /// </summary>
 public static class DbInitializer
 {
+    /// <summary>
+    /// Convenience entry point invoked from <c>Program.cs</c> on startup.
+    /// Pulls a scoped <see cref="FactoryBrainDbContext"/> + <see cref="IRagService"/>
+    /// out of the root provider and runs the full seed pass.
+    /// </summary>
+    public static async Task Initialize(IServiceProvider sp, CancellationToken ct = default)
+        => await SeedAsync(sp, ct);
+
     public static async Task SeedAsync(IServiceProvider sp, CancellationToken ct = default)
     {
         await using var scope = sp.CreateAsyncScope();

@@ -13,7 +13,7 @@ namespace FactoryBrain.Api.Services;
 /// produces a deterministic Insight + a secondary energy Insight when the
 /// maintenance or manager agent scores above 0.3 on the duty tool.
 /// </summary>
-public sealed class AgentRunService : IAgentService
+public sealed class AgentRunService : IAgentRunService
 {
     private readonly FactoryBrainDbContext _db;
     private readonly IFloorAlertService _alerts;
@@ -48,8 +48,8 @@ public sealed class AgentRunService : IAgentService
         );
     }
 
-    public async Task<IReadOnlyList<AgentDefinition>> Roster() =>
-        await _db.Agents.AsNoTracking().OrderBy(a => a.Id).ToListAsync();
+    public async Task<IReadOnlyList<AgentDefinition>> RosterAsync(CancellationToken ct = default) =>
+        await _db.Agents.AsNoTracking().OrderBy(a => a.Id).ToListAsync(ct);
 
     private async Task<PersistResult> PersistRunAsync(AgentDefinition agent, string? warning, string source, CancellationToken ct)
     {

@@ -2,10 +2,67 @@
 // Streaming blocks: analyzed → finding → factors → evidence → recommendation → done.
 // Routes to the live slice API when a key is present, otherwise produces a deterministic
 // derivation against the synthetic factory state.
+//
+// RAG: each query is run through the vector index (`./rag/indexer.ts`) so the
+// generated answer can cite specific manuals / policies / QC procedures.
+// Confidence + source attributions are passed through to the LLM prompt and
+// surfaced in the streamed `evidence` blocks.
+//
+// The RAG modules pull in `node:fs` / `node:path` / `node:crypto` for
+// persistence + deterministic hashing, which webpack refuses to bundle into
+// the client. We lazy-load the rag indexer on first use (server-side only)
+// so client components that import this file don't trip the bundler.
 
 import { dataset } from "./dataset";
 import { factoryTools } from "./factory.tools";
 import type { AskAnswer, AskContextPack, StreamChunk, EvidenceRefPublic, RiskTier } from "./types";
+import type { RagHit, RagFilter, RagDepartment, RagCategory } from "./rag/vector-store";
+
+/** We type-narrow the RAG module shape so the require'd module can still be
+ *  used as if it were statically imported. */
+type RagModule = {
+  ensureIndexed: (opts?: { force?: boolean }) => Promise<unknown>;
+  retrieve: (
+    query: string,
+    opts?: { topK?: number; threshold?: number; filter?: RagFilter }
+  ) => Promise<RagHit[]>;
+  hitsToEvidenceRefs: (hits: RagHit[]) => Array<{
+    domain: EvidenceRefPublic["domain"];
+    count: number;
+    previewIds?: string[];
+    filter?: Record<string, string | number | boolean>;
+  }>;
+};
+
+/** Optional metadata filter accepted from the /api/ask route. */
+export type AskRagFilter = {
+  department?: RagDepartment | RagDepartment[];
+  category?: RagCategory | RagCategory[];
+};
+
+let _ragModule: RagModule | null = null;
+
+/** Lazy server-side require of the RAG module. Cached after first call.
+ *  Uses `require` so the client bundle never sees the `node:*` imports that
+ *  live inside the rag implementation. */
+function rag(): RagModule {
+  if (_ragModule) return _ragModule;
+  // Lazy server-side require; the @typescript-eslint/no-var-requires rule
+  // isn't installed in this project's eslint config, so we don't need a
+  // disable comment, but we leave the in-source justification for grep:
+  _ragModule = require("./rag") as RagModule;
+  return _ragModule;
+}
+
+function topKFromEnv(): number {
+  const v = Number(process.env.RAG_TOP_K);
+  return Number.isFinite(v) && v > 0 ? v : 4;
+}
+
+function thresholdFromEnv(): number {
+  const v = Number(process.env.RAG_SIMILARITY_THRESHOLD);
+  return Number.isFinite(v) ? v : 0.0;
+}
 
 /** Lazily resolve the factory store. */
 function factoryState() {
@@ -29,7 +86,7 @@ export const askService = {
   suggestions(): string[] {
     return [...SUGGESTIONS_EN, ...SUGGESTIONS_BN];
   },
-  buildContextPack(query: string, agentId?: string | null): AskContextPack {
+  async buildContextPack(query: string, agentId?: string | null, ragFilter?: AskRagFilter): Promise<AskContextPack> {
     const q = query.toLowerCase();
     const wantRisk = /risk|miss|at.risk|ঝুঁকি|মিস/.test(q);
     const wantEfficiency = /efficiency|target|দক্ষতা|লক্ষ্য/.test(q);
@@ -53,6 +110,24 @@ export const askService = {
     // demo answer + the live LLM prompt. Locale follows the query shape.
     const locale: "en" | "bn" = /[\u0980-\u09FF]/.test(query) ? "bn" : "en";
     const manualHits = factoryTools.search_manual(query, { locale, limit: 5 }).hits;
+    // RAG retrieval — runs the question through the vector index, returns
+    // top-k chunks with cosine + BM25 hybrid scores. Filterable by
+    // department/category from the API caller.
+    const mod = rag();
+    await mod.ensureIndexed();
+    const ragFilterResolved: RagFilter = ragFilter
+      ? {
+          department: ragFilter.department,
+          category: ragFilter.category,
+          locale
+        }
+      : { locale };
+    const ragHits: RagHit[] = await mod.retrieve(query, {
+      topK: topKFromEnv(),
+      threshold: thresholdFromEnv(),
+      filter: ragFilterResolved
+    });
+    const ragEvidence: EvidenceRefPublic[] = mod.hitsToEvidenceRefs(ragHits);
     return {
       query,
       scope: agentId ? [agentId] : undefined,
@@ -61,8 +136,16 @@ export const askService = {
       relevantEntities: nodes,
       // Attach manual hits for the live prompt to surface; the demo path
       // re-derives them per branch below so it can dedupe by domain.
-      manualHits
-    } as AskContextPack & { manualHits: typeof manualHits };
+      manualHits,
+      // RAG hits: dense + BM25 hybrid score, with chunk metadata so the
+      // prompt builder can attribute findings to specific manuals.
+      ragHits,
+      ragEvidence
+    } as AskContextPack & {
+      manualHits: typeof manualHits;
+      ragHits: RagHit[];
+      ragEvidence: EvidenceRefPublic[];
+    };
   },
   // Returns a streaming generator. Each yielded chunk is one of the answer blocks.
   async *stream(pack: AskContextPack): AsyncGenerator<StreamChunk> {
@@ -73,10 +156,12 @@ export const askService = {
     const locale: "en" | "bn" = /[\u0980-\u09FF]/.test(pack.query) ? "bn" : "en";
     const manualHits = (pack as any).manualHits as ReturnType<typeof factoryTools.search_manual>["hits"] | undefined
       ?? factoryTools.search_manual(pack.query, { locale, limit: 5 }).hits;
+    const ragHits: RagHit[] | undefined = (pack as any).ragHits;
+    const ragEvidence: EvidenceRefPublic[] | undefined = (pack as any).ragEvidence;
 
     // Build a single evidence block from `manualHits` (if any) so the demo
     // answer can include citations in its `evidence` array regardless of
-    // branch.
+    // branch. RAG-derived evidence is merged in (de-duped by source id).
     const manualEvidence: EvidenceRefPublic[] = manualHits.length
       ? [{
           domain: "manuals",
@@ -84,6 +169,7 @@ export const askService = {
           previewIds: manualHits.map((h) => h.id)
         }]
       : [];
+    const combinedEvidence: EvidenceRefPublic[] = mergeEvidence(manualEvidence, ragEvidence);
 
     if (wantMaintenance || pack.scope?.includes("maintenance-agent")) {
       const machines = factoryTools.get_machine_health();
@@ -108,7 +194,7 @@ export const askService = {
       const evidence: EvidenceRefPublic[] = [
         { domain: "inventory", count: machines.length, previewIds: machines.slice(0, 6).map((m) => m.machine.id) },
         { domain: "policies", count: 1, previewIds: ["policy:maintenance-sop-1"] },
-        ...manualEvidence
+        ...combinedEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -146,7 +232,7 @@ export const askService = {
       const evidence: EvidenceRefPublic[] = [
         { domain: "orders", count: focus.ordersAtRisk, filter: { lineId: focus.line.id } },
         { domain: "inventory", count: 1, filter: { machineScope: focus.line.id } },
-        ...manualEvidence
+        ...combinedEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -184,7 +270,7 @@ export const askService = {
       await sleep(140);
       const evidence: EvidenceRefPublic[] = [
         { domain: "orders", count: atRisk.reduce((a, l) => a + l.ordersAtRisk, 0), previewIds: atRisk.slice(0, 4).map((l) => l.line.id) },
-        ...manualEvidence
+        ...combinedEvidence
       ];
       yield { type: "evidence", index: 3, payload: evidence };
       await sleep(140);
@@ -215,7 +301,7 @@ export const askService = {
       await sleep(160);
       const factors: { label: string; labelBn: string; magnitude: string; magnitudeBn: string }[] = [];
       yield { type: "factor", index: 2, payload: factors };
-      yield { type: "evidence", index: 3, payload: manualEvidence };
+      yield { type: "evidence", index: 3, payload: combinedEvidence };
       yield { type: "recommendation", index: 4, payload: {
         title: "Ask a specific question next",
         titleBn: "পরবর্তীতে একটি নির্দিষ্ট প্রশ্ন জিজ্ঞাসা করুন",
@@ -231,6 +317,43 @@ export const askService = {
 function focusSummary(atRisk: ReturnType<typeof factoryTools.get_line_status>): string {
   if (!atRisk.length) return "All lines are on target";
   return atRisk.map((l) => `${l.line.name} at ${Math.round(l.line.efficiency * 100)}%`).join(", ");
+}
+
+/**
+ * Merge legacy manual-search evidence with RAG-derived evidence. The two
+ * arrays reference the same domain (`manuals` / `policies`) but the RAG
+ * evidence is freshly grouped by category + department, so we union
+ * `previewIds` per domain + take the larger count.
+ */
+function mergeEvidence(
+  legacy: EvidenceRefPublic[] | undefined,
+  rag: EvidenceRefPublic[] | undefined
+): EvidenceRefPublic[] {
+  const out: EvidenceRefPublic[] = [];
+  const byKey = new Map<string, EvidenceRefPublic>();
+  const add = (ref: EvidenceRefPublic) => {
+    const key = ref.domain + (ref.filter?.department ? `:${ref.filter.department}` : "");
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { ...ref });
+    } else {
+      const merged: EvidenceRefPublic = {
+        domain: prev.domain,
+        count: prev.count + ref.count,
+        previewIds: dedupe([...(prev.previewIds ?? []), ...(ref.previewIds ?? [])]),
+        filter: prev.filter ?? ref.filter
+      };
+      byKey.set(key, merged);
+    }
+  };
+  for (const r of legacy ?? []) add(r);
+  for (const r of rag ?? []) add(r);
+  for (const v of byKey.values()) out.push(v);
+  return out;
+}
+
+function dedupe(arr: string[]): string[] {
+  return Array.from(new Set(arr));
 }
 
 function sleep(ms: number) {

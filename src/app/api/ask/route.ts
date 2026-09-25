@@ -2,10 +2,15 @@
 // When LLM_PROVIDER + LLM_API_KEY are set, the route forwards the question +
 // a context pack to the model and adapts the response to the streaming shape
 // the UI expects. Otherwise the demo mock is used.
+//
+// RAG: optional `department` + `category` filters restrict the retrieved
+// citations to a slice of the indexed knowledge corpus. The synthesized
+// answer is streamed back alongside the full evidence array so the
+// `EvidenceBlock` component can render source attributions.
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { askService } from "@/services/ask.service";
+import { askService, type AskRagFilter } from "@/services/ask.service";
 import { insightService } from "@/services/insight.service";
 import { agentService } from "@/services/agent.service";
 import type { AskAnswer, StreamChunk, RiskTier } from "@/services/types";
@@ -30,9 +35,25 @@ function defaultModel(): string {
   }
 }
 
+const RagDepartmentSchema = z.enum(["sewing", "cutting", "finishing", "qc", "general"]);
+const RagCategorySchema = z.enum(["manuals", "compliance", "qc", "policy", "sop"]);
+
+const RagFilterSchema = z
+  .object({
+    department: z
+      .union([RagDepartmentSchema, z.array(RagDepartmentSchema)])
+      .optional(),
+    category: z
+      .union([RagCategorySchema, z.array(RagCategorySchema)])
+      .optional()
+  })
+  .optional();
+
 const BodySchema = z.object({
   query: z.string().min(1).max(2000),
-  agentId: z.string().min(1).max(64).optional()
+  agentId: z.string().min(1).max(64).optional(),
+  /** RAG filter — restricts the retriever to one department / category. */
+  filter: RagFilterSchema
 });
 
 export async function POST(req: NextRequest) {
@@ -49,7 +70,8 @@ export async function POST(req: NextRequest) {
 
   const query = parsed.data.query;
   const agentId = parsed.data.agentId;
-  const pack = askService.buildContextPack(query, agentId);
+  const ragFilter = parsed.data.filter as AskRagFilter | undefined;
+  const pack = await askService.buildContextPack(query, agentId, ragFilter);
   // When an agent is pre-selected, seed the demo stream with that agent's
   // most recent insight so the answer is visibly tailored.
   if (agentId) {
@@ -61,7 +83,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!live) {
-    return mockStream(pack, agentId);
+    return mockStream(pack, agentId, undefined, ragFilter);
   }
 
   try {
@@ -69,22 +91,65 @@ export async function POST(req: NextRequest) {
       query: pack.query,
       health: pack.health,
       relevantInsights: pack.relevantInsights,
-      manualHits: (pack as any).manualHits
+      manualHits: (pack as any).manualHits,
+      ragHits: (pack as any).ragHits
     });
     return Response.json(answer);
   } catch (err) {
     // Live failed — fall back to the deterministic mock so the UI never breaks.
     console.error("[ask] live model failed, falling back to demo", err);
-    return mockStream(pack, agentId, { warning: "Live model unavailable, showing demo answer." });
+    return mockStream(pack, agentId, { warning: "Live model unavailable, showing demo answer." }, ragFilter);
   }
 }
 
-function mockStream(pack: { query: string; agentInsight?: any; agentName?: string }, agentId?: string, note?: { warning: string }) {
+function mockStream(
+  pack: { query: string; agentInsight?: any; agentName?: string },
+  agentId?: string,
+  note?: { warning: string },
+  ragFilter?: AskRagFilter
+) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       if (note) {
         controller.enqueue(encoder.encode(`event: notice\ndata: ${JSON.stringify(note)}\n\n`));
+      }
+      // Emit the RAG filter + retrieved citations up front so the UI can
+      // render the `EvidenceBlock` immediately. Falls back to no event when
+      // nothing was retrieved (e.g. demo path with no chunks matching).
+      const ragHits = (pack as any).ragHits as Array<{
+        chunk: { id: string; sourceId: string; title: string; department: string; category: string; tags: string[] };
+        hybridScore: number;
+        score: number;
+        bm25Score: number;
+      }> | undefined;
+      if (ragHits && ragHits.length) {
+        controller.enqueue(
+          encoder.encode(
+            `event: citations\ndata: ${JSON.stringify({
+              filter: ragFilter ?? null,
+              hits: ragHits.map((h) => ({
+                id: h.chunk.id,
+                sourceId: h.chunk.sourceId,
+                title: h.chunk.title,
+                department: h.chunk.department,
+                category: h.chunk.category,
+                tags: h.chunk.tags,
+                hybridScore: Number(h.hybridScore.toFixed(4)),
+                denseScore: Number(h.score.toFixed(4)),
+                bm25Score: Number(h.bm25Score.toFixed(4))
+              }))
+            })}\n\n`
+          )
+        );
+      } else if (ragFilter) {
+        // Surface the filter echo even when no hits were returned so the UI
+        // can label "0 sources" rather than leave the user guessing.
+        controller.enqueue(
+          encoder.encode(
+            `event: citations\ndata: ${JSON.stringify({ filter: ragFilter, hits: [] })}\n\n`
+          )
+        );
       }
       for await (const chunk of askService.stream(pack as any)) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
@@ -107,13 +172,13 @@ function mockStream(pack: { query: string; agentInsight?: any; agentName?: strin
   });
 }
 
-async function callModel(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[] }): Promise<AskAnswer> {
+async function callModel(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[]; ragHits?: any[] }): Promise<AskAnswer> {
   const prompt = buildPrompt(pack);
   const raw = await dispatch(prompt);
   return adapt(raw, pack);
 }
 
-function buildPrompt(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[] }) {
+function buildPrompt(pack: { query: string; health: unknown; relevantInsights: any[]; manualHits?: any[]; ragHits?: any[] }) {
   const manualSnippet = (pack.manualHits ?? []).slice(0, 5).map((h) => ({
     id: h.id,
     title: h.title,
@@ -121,10 +186,24 @@ function buildPrompt(pack: { query: string; health: unknown; relevantInsights: a
     source: h.source,
     score: h.score
   }));
+  // RAG-retrieved chunks: dense + BM25 hybrid score, department + category
+  // metadata, and the chunk text so the LLM can quote / cite accurately.
+  const ragSnippet = (pack.ragHits ?? []).slice(0, 5).map((h: any) => ({
+    id: h.chunk.id,
+    sourceId: h.chunk.sourceId,
+    title: h.chunk.title,
+    snippet: (h.chunk.text ?? "").slice(0, 240),
+    department: h.chunk.department,
+    category: h.chunk.category,
+    tags: h.chunk.tags,
+    hybridScore: Number(h.hybridScore?.toFixed?.(3) ?? h.hybridScore),
+    denseScore: Number(h.score?.toFixed?.(3) ?? h.score),
+    bm25Score: Number(h.bm25Score?.toFixed?.(3) ?? h.bm25Score)
+  }));
   return [
     "You are BunonBrain, the factory-floor operations assistant for a Bangladeshi RMG factory.",
     "Three specialist agents back you: line-throughput-agent (line efficiency + bottlenecks), maintenance-agent (machine telemetry + failure prediction), manager-agent (routes questions, drafts the morning brief).",
-    "Answer the user's question using the context pack below. Cite the manuals below by `doc-N` id when relevant (use the `manuals` domain in `evidence`).",
+    "Answer the user's question using the context pack below. Cite the manuals below by `doc-N` id when relevant (use the `manuals` domain in `evidence`). When RAG hits include a specific chunk id, quote + cite that chunk.",
     "Return ONLY JSON matching this shape:",
     JSON.stringify(
       {
@@ -150,7 +229,8 @@ function buildPrompt(pack: { query: string; health: unknown; relevantInsights: a
     "Question: " + pack.query,
     "Health: " + JSON.stringify(pack.health),
     "Relevant insights: " + JSON.stringify(pack.relevantInsights.map((i) => ({ id: i.id, title: i.title, finding: i.finding }))),
-    "Manual corpus hits (cite these by id): " + JSON.stringify(manualSnippet)
+    "Manual corpus hits (cite these by id): " + JSON.stringify(manualSnippet),
+    "RAG-retrieved chunks (cite by chunk id, prefer these over the legacy manual hits above): " + JSON.stringify(ragSnippet)
   ].join("\n\n");
 }
 

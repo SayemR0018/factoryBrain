@@ -247,4 +247,4 @@ The single `.env.example` at `FactoryBrain.Api/.env.example` documents every var
 
 ## License
 
-Proprietary — BunonBrain / ShilpoHubBD internal build. Built for the IndustrySphere AI Challenge at CloudCamp Bangladesh (International AI Builders Congress 2026).
+Proprietary — BunonBrain internal build. Built for the IndustrySphere AI Challenge at CloudCamp Bangladesh (International AI Builders Congress 2026).

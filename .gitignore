@@ -7,7 +7,11 @@
 tsconfig.tsbuildinfo
 
 # puku-cli harness state — local-only, auto-mutated by the CLI tool.
-# The `settings.local.json` file records per-machine behaviour (allowed
-# commands, hooks) and shouldn't be checked into the repo. The bundled
-# `skills/` folder IS shipped intentionally — see .puku-cli/skills/.
-.puku-cli/settings.local.json
+# Everything under `.puku-cli/` is per-machine / per-install state:
+#   * `settings.local.json` records per-machine behaviour (allowed commands,
+#     hooks) and is mutated every time the CLI runs.
+#   * `skills/` is restored locally from `skills-lock.json` (the integrity
+#     manifest at the project root) by the puku-cli skill-fetch mechanism.
+#     Skills ship from the third-party source `iart-ai/web-animation-skills`
+#     referenced in `skills-lock.json` — they shouldn't bloat the repo.
+.puku-cli/

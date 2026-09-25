@@ -14,5 +14,6 @@ public record LlmSettingsRequest(
     string? Provider,
     string? ApiKey,
     string? Model,
-    bool? ClearKey
+    bool? ClearKey,
+    bool? ClearAll
 );

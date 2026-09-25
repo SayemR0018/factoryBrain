@@ -500,6 +500,16 @@ async function runSettingsLlmRuntimeCheck() {
     await waitForServer(base);
     const headers = { "Content-Type": "application/json" };
 
+    // Reset /api/settings/llm to a known-clean baseline so this run is
+    // deterministic regardless of any state the .NET process accumulated
+    // from a previous smoke run.
+    await fetch(base + "/api/settings/llm", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ clearAll: true }),
+      cache: "no-store"
+    });
+
     // Hit GET /api/settings/llm FIRST and explicitly assert the runtime
     // contract: response JSON has no apiKey, no LLM_API_KEY, and no
     // key-shaped string field. This is the runtime-only companion to the

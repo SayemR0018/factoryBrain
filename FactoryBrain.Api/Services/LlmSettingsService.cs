@@ -37,6 +37,18 @@ public sealed class LlmSettingsService : ILlmSettingsService
 
     public LlmSettingsResponse Update(LlmSettingsRequest req)
     {
+        // Hard-reset path: clearAll wipes provider, model, and key in one shot.
+        // This is what /api/settings/llm tests use to return to a known
+        // baseline; without it, the service would happily re-emit the last
+        // configured value across process invocations.
+        if (req.ClearAll == true)
+        {
+            Environment.SetEnvironmentVariable("LLM_PROVIDER", null);
+            Environment.SetEnvironmentVariable("LLM_MODEL", null);
+            Environment.SetEnvironmentVariable("LLM_API_KEY", null);
+            return ReadStatus();
+        }
+
         bool firstConfigure = string.IsNullOrEmpty(Norm(Environment.GetEnvironmentVariable("LLM_PROVIDER")))
                           && string.IsNullOrEmpty(Norm(Environment.GetEnvironmentVariable("LLM_API_KEY")));
 

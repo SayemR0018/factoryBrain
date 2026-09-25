@@ -5,3 +5,9 @@
 .env*.local
 *.log
 tsconfig.tsbuildinfo
+
+# puku-cli harness state — local-only, auto-mutated by the CLI tool.
+# The `settings.local.json` file records per-machine behaviour (allowed
+# commands, hooks) and shouldn't be checked into the repo. The bundled
+# `skills/` folder IS shipped intentionally — see .puku-cli/skills/.
+.puku-cli/settings.local.json

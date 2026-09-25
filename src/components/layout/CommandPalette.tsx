@@ -55,6 +55,7 @@ export function CommandPalette() {
 
   const flat = useMemo<SearchItem[]>(() => {
     if (!q.trim()) return [];
+    void open; // open is intentionally part of deps so the palette re-derives on open.
     return searchService.search(q, locale);
   }, [q, locale, open]);
 
@@ -96,7 +97,8 @@ export function CommandPalette() {
     if (el) el.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  const suggestions = useMemo(() => searchService.suggestions(locale), [locale]);
+  // locale is intentional re-trigger signal; suggestions() closes over translations.
+  const suggestions = useMemo(() => { void locale; return searchService.suggestions(locale); }, [locale]);
   const showEmptyQueryState = !q.trim();
   const showNoResults = !!q.trim() && flatForNav.length === 0;
 

@@ -67,8 +67,11 @@ export default function ApprovalsPage() {
     return () => clearTimeout(t2);
   }, [search]);
 
-  const all = useMemo(() => insightService.feed(), [tick]);
+  // tick is intentionally in the deps to re-derive after server refresh; touch
+  // it here so ESLint sees a real read.
+  const all = useMemo(() => { void tick; return insightService.feed(); }, [tick]);
   const items = useMemo(() => {
+    void tick; // re-derive on server tick
     let filtered = all.filter((i) => statusFilter === "all" ? true : i.stage === "pending_approval");
     if (agentFilter !== "all") filtered = filtered.filter((i) => i.agentId === agentFilter);
     if (riskFilter !== "all") filtered = filtered.filter((i) => i.recommendation.riskTier === riskFilter);
@@ -88,9 +91,10 @@ export default function ApprovalsPage() {
     }).map((i) => ({ id: i.agentId, label: i.agentLabel }));
   }, [all]);
 
-  const decisionsToday = useMemo(() => activityService.countToday(), [tick]);
+  // tick is intentionally in the deps to refresh after a server tick.
+  const decisionsToday = useMemo(() => { void tick; return activityService.countToday(); }, [tick]);
 
-  function approve(id: string) {
+  const approve = useCallback((id: string) => {
     const insight = all.find((i) => i.id === id);
     approvalService.approve(id);
     setTick((n) => n + 1);
@@ -106,7 +110,7 @@ export default function ApprovalsPage() {
         }
       }
     });
-  }
+  }, [all, toast, t]);
 
   function reject(id: string) {
     if (!reason.trim()) return;
@@ -122,6 +126,8 @@ export default function ApprovalsPage() {
     });
   }
 
+  // approve is captured via the latest closure via the items array; items is
+  // already in deps, so we don't list approve separately.
   const onKey = useCallback((e: KeyboardEvent) => {
     if (rejectingId) return;
     const focused = document.activeElement as HTMLElement | null;
@@ -144,7 +150,7 @@ export default function ApprovalsPage() {
         cardRefs.current[next.id]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     }
-  }, [items, rejectingId]);
+  }, [items, rejectingId, approve]);
 
   useEffect(() => {
     window.addEventListener("keydown", onKey);

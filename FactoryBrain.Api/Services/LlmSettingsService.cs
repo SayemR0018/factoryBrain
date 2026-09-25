@@ -58,17 +58,14 @@ public sealed class LlmSettingsService : ILlmSettingsService
         else nextModel = Norm(Environment.GetEnvironmentVariable("LLM_MODEL"));
 
         // Key
-        bool keyChange = false;
         string? trimmedKey = string.IsNullOrEmpty(req.ApiKey) ? null : req.ApiKey.Trim();
 
         if (req.ClearKey == true)
         {
-            keyChange = true;
             Environment.SetEnvironmentVariable("LLM_API_KEY", null);
         }
         else if (!string.IsNullOrEmpty(trimmedKey))
         {
-            keyChange = true;
             Environment.SetEnvironmentVariable("LLM_API_KEY", trimmedKey);
         }
 

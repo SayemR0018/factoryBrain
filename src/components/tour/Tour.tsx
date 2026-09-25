@@ -35,7 +35,8 @@ export function Tour() {
   const setTourDismissed = useAppStore((s) => s.setTourDismissed);
   const mounted = useMounted();
 
-  // Force re-build of the driver whenever locale changes
+  // Force re-build of the driver whenever locale changes; t is the dep proxy.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const steps = useMemo(() => stepsFor(t), [t, locale]);
 
   useEffect(() => {

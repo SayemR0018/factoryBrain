@@ -1,9 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace FactoryBrain.Api.Dtos.Settings;
 
 public record LlmSettingsResponse(
     bool Configured,
-    string? Provider,
-    string? Model,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Provider,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Model,
     string Mode,            // "demo" | "live"
     string Persistence      // "env.local" | "process" | "vercel_only"
 );

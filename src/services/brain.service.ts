@@ -88,5 +88,8 @@ export function useBrainGraph(filters?: { kinds?: BrainEntityPublic["kind"][]; q
     const ids = new Set(nodes.map((n) => n.id));
     const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
     return { nodes, edges };
+  // kinds is intentionally stringified for stable dep identity; both kinds & query
+  // are read below via filters.kinds.length and filters.query.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, filters?.kinds?.join(","), filters?.query]);
 }

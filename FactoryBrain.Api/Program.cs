@@ -149,6 +149,7 @@ using (var scope = app.Services.CreateScope())
 
 // ─── Middleware pipeline ───────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionMiddleware>();   // 1. JSON error envelope
+app.UseMiddleware<NoStoreMiddleware>();           // 2. Cache-Control: no-store on /api/* GETs
 
 if (app.Environment.IsDevelopment())
 {

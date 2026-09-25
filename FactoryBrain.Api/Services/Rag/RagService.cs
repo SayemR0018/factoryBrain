@@ -29,6 +29,7 @@ public sealed class RagService : IRagService
         string docId, string title, string body, IEnumerable<string> tags,
         string department, string category, CancellationToken ct = default)
     {
+        await Task.Yield(); // yield to scheduler; the body is CPU-bound embedding work
         var tagList = tags.ToList();
         var pieces = _chunker.Split(body);
         var chunks = new List<DocumentChunk>();

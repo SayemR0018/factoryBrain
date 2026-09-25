@@ -38,6 +38,8 @@ export default function IntegrationsPage() {
     return () => clearInterval(id);
   }, []);
 
+  // tick + sources are intentional re-trigger signals; service is static.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo(() => ingestionService.list(), [sources, tick]);
   const connectedCount = list.filter((s) => s.status === "connected").length;
 

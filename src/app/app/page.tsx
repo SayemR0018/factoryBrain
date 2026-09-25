@@ -94,12 +94,19 @@ export default function OverviewPage() {
     return () => clearInterval(id);
   }, []);
 
+  // tick is intentional — services are static; tick triggers re-render after
+  // async server refreshes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const health = useMemo(() => metricService.health(), [tick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const profile = useMemo(() => businessService.getProfile(), [tick, mounted]);
   const name = profile.businessName || profile.industry || "Your business";
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const pinned = useMemo(() => insightService.feed({ stage: "suggested" }).slice(0, 3), [tick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const approvals = useMemo(() => approvalService.pending().slice(0, 2), [tick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const activity = useMemo(() => activityService.recent({ limit: 5 }), [tick]);
   const sourcesCount = mounted ? connectedSourceCount() : 0;
 

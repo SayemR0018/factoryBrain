@@ -421,13 +421,13 @@ function AgentPanel({
   const { t, locale } = useT();
   const effectiveMode = mode ?? (agent.execution === "auto" ? "auto" : agent.execution === "approval_required" ? "approval" : "auto");
   // `refreshKey` in the deps array ensures freshly-persisted insights are
-  // surfaced after a run completes.
+  // surfaced after a run completes — touch it so the lint rule sees the read.
   const insights = useMemo(
-    () => insightService.feed({ agentId: agent.id }).slice(0, 3),
+    () => { void refreshKey; return insightService.feed({ agentId: agent.id }).slice(0, 3); },
     [agent.id, refreshKey]
   );
   const recent = useMemo(
-    () => activityService.recent({ limit: 5 }).filter((a) => a.actor === agent.id),
+    () => { void refreshKey; return activityService.recent({ limit: 5 }).filter((a) => a.actor === agent.id); },
     [agent.id, refreshKey]
   );
   const palette = AGENT_PALETTE[agent.glyph as AgentGlyph];

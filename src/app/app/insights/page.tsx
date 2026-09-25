@@ -40,6 +40,9 @@ export default function InsightsPage() {
     window.addEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
     return () => window.removeEventListener("bunonbrain:insights-refresh", onRefresh as EventListener);
   }, []);
+  // tick is intentionally in the deps to re-group after server refresh; the
+  // service itself doesn't reference it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const groups = useMemo(() => insightService.groupedByStage(), [tick]);
   const agents = useMemo(() => agentService.list(), []);
   const selectedAgentId = useBusinessStore((s) => s.selectedAgentId);

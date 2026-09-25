@@ -27,7 +27,40 @@ public sealed class SensorService : ISensorService
     private static SimState _state = Seed();
     private readonly FactoryBrainDbContext _db;
 
-    public SensorService(FactoryBrainDbContext db) { _db = db; }
+    public SensorService(FactoryBrainDbContext db)
+    {
+        _db = db;
+        SyncNextIdFromDatabaseAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// On first construction (per process), look at the highest existing
+    /// <c>srv-sensor-N</c> primary key in Postgres and bump <c>_state.NextId</c>
+    /// past it so freshly-ingested readings don't collide with persisted ones.
+    /// </summary>
+    private async Task SyncNextIdFromDatabaseAsync()
+    {
+        try
+        {
+            var maxId = await _db.SensorReadings
+                .Where(r => r.Id.StartsWith("srv-sensor-"))
+                .Select(r => r.Id)
+                .ToListAsync();
+            int max = 0;
+            foreach (var id in maxId)
+            {
+                if (id.StartsWith("srv-sensor-") &&
+                    int.TryParse(id.AsSpan("srv-sensor-".Length), out var n) &&
+                    n > max) max = n;
+            }
+            if (max >= _state.NextId) _state.NextId = max + 1;
+        }
+        catch
+        {
+            // best-effort; if DB is unreachable the first ingest will surface the
+            // underlying error via GlobalExceptionMiddleware.
+        }
+    }
 
     public SensorSimState CurrentState => new(
         _state.Tick,

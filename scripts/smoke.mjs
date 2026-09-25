@@ -80,23 +80,23 @@ async function main() {
     "src/store/sensors.store.ts",
     "src/store/floorAlerts.store.ts",
     "src/store/factoryBrain.live.store.ts",
-    "src/app/api/sensors/ingest/route.ts",
-    "src/app/api/sensors/latest/route.ts",
-    "src/app/api/floor-alerts/route.ts",
-    "src/app/api/floor-alerts/[id]/route.ts",
+    "src/_legacy_api/sensors/ingest/route.ts",
+    "src/_legacy_api/sensors/latest/route.ts",
+    "src/_legacy_api/floor-alerts/route.ts",
+    "src/_legacy_api/floor-alerts/[id]/route.ts",
     "src/components/activity/FloorAlertsPanel.tsx",
-    "src/app/api/settings/llm/route.ts",
+    "src/_legacy_api/settings/llm/route.ts",
     "src/services/lineBoard.server.ts",
-    "src/app/api/line-board/route.ts",
-    "src/app/api/line-board/refresh/route.ts",
+    "src/_legacy_api/line-board/route.ts",
+    "src/_legacy_api/line-board/refresh/route.ts",
     "src/components/overview/LineBoardPanel.tsx",
     "src/components/overview/BriefCard.tsx",
     "src/services/brief.server.ts",
-    "src/app/api/brief/morning/route.ts",
+    "src/_legacy_api/brief/morning/route.ts",
     "src/data/qc.defects.ts",
     "src/services/qc.defects.server.ts",
-    "src/app/api/qc/defects/route.ts",
-    "src/app/api/qc/flag/route.ts",
+    "src/_legacy_api/qc/defects/route.ts",
+    "src/_legacy_api/qc/flag/route.ts",
     "src/components/overview/QcSummary.tsx",
     "src/app/app/qc/page.tsx"
   ]) {
@@ -148,13 +148,13 @@ async function main() {
   assert(overview.includes("Simulate tick"), "overview has Simulate tick control");
   const activity = await read("src/app/app/activity/page.tsx");
   assert(activity.includes("FloorAlertsPanel"), "activity mounts FloorAlertsPanel");
-  const latestRoute = await read("src/app/api/sensors/latest/route.ts");
+  const latestRoute = await read("src/_legacy_api/sensors/latest/route.ts");
   assert(latestRoute.includes("listLatestReadings"), "latest reads server ingest buffer");
   assert(!latestRoute.includes("useSensorsStore"), "latest does not import client sensors store");
   const sensorsServer = await read("src/services/sensors.server.ts");
   assert(sensorsServer.includes("__factoryBrainSimState"), "sensors.server owns shared sim buffer");
   assert(sensorsServer.includes("listLatestReadings"), "sensors.server exports listLatestReadings");
-  const agentRun = await read("src/app/api/agents/[agentId]/run/route.ts");
+  const agentRun = await read("src/_legacy_api/agents/[agentId]/run/route.ts");
   assert(agentRun.includes("persistAgentRun"), "agents/run persists via persistAgentRun");
 
   // 7. Line-board route — file-shape contract (improve batch).
@@ -163,10 +163,10 @@ async function main() {
   assert(lineBoard.includes("LINE_BOARD_SIMULATED_LABEL"), "lineBoard: simulated label exported");
   assert(lineBoard.includes("buildLineBoard"), "lineBoard: buildLineBoard exported");
   assert(lineBoard.includes("BottleneckEnum"), "lineBoard: bottleneck enum defined");
-  const lineBoardRoute = await read("src/app/api/line-board/route.ts");
+  const lineBoardRoute = await read("src/_legacy_api/line-board/route.ts");
   assert(lineBoardRoute.includes('export async function GET'), "line-board: GET handler present");
   assert(lineBoardRoute.includes("buildLineBoard"), "line-board: uses buildLineBoard");
-  const lineBoardRefresh = await read("src/app/api/line-board/refresh/route.ts");
+  const lineBoardRefresh = await read("src/_legacy_api/line-board/refresh/route.ts");
   assert(lineBoardRefresh.includes('export async function POST'), "line-board/refresh: POST handler present");
   assert(lineBoardRefresh.includes("advanceSim"), "line-board/refresh: advances sim before reading");
   assert(lineBoardRefresh.includes("buildLineBoard"), "line-board/refresh: returns buildLineBoard payload");
@@ -178,7 +178,7 @@ async function main() {
   assert(brief.includes("BRIEF_SIMULATED_LABEL"), "brief: simulated label exported");
   assert(brief.includes("FUTURE_LLM_HOOK"), "brief: LLM-future placeholder comment present");
   assert(brief.includes(".strict()"), "brief: response schema is Zod-strict");
-  const briefRoute = await read("src/app/api/brief/morning/route.ts");
+  const briefRoute = await read("src/_legacy_api/brief/morning/route.ts");
   assert(briefRoute.includes('export async function GET'), "brief/morning: GET handler present");
   assert(briefRoute.includes("buildMorningBrief"), "brief/morning: uses buildMorningBrief");
   assert(briefRoute.includes('runtime = "nodejs"'), "brief/morning: runtime = nodejs");
@@ -226,7 +226,7 @@ async function main() {
   assert(qcSvc.includes("buildQcDefects"), "qc: buildQcDefects exported");
   assert(qcSvc.includes("QC_SIMULATED_LABEL"), "qc: simulated label exported");
   assert(qcSvc.includes(".strict()"), "qc: response schema is Zod-strict");
-  const qcRoute = await read("src/app/api/qc/defects/route.ts");
+  const qcRoute = await read("src/_legacy_api/qc/defects/route.ts");
   assert(qcRoute.includes('export async function GET'), "qc/defects: GET handler present");
   assert(qcRoute.includes("buildQcDefects"), "qc/defects: uses buildQcDefects");
   assert(qcRoute.includes('runtime = "nodejs"'), "qc/defects: runtime = nodejs");
@@ -236,7 +236,7 @@ async function main() {
   assert(bn.includes("qc:") && bn.includes("cardTitle:"), "i18n bn: qc namespace + cardTitle present");
 
   // QC panel + flag route + page + sidebar (improve batch — qc UI).
-  const qcFlagRoute = await read("src/app/api/qc/flag/route.ts");
+  const qcFlagRoute = await read("src/_legacy_api/qc/flag/route.ts");
   assert(qcFlagRoute.includes('export async function POST'), "qc/flag: POST handler present");
   assert(qcFlagRoute.includes("insightService"), "qc/flag: uses insightService to persist");
   assert(qcFlagRoute.includes("upsertCustom"), "qc/flag: uses insightService.upsertCustom");
@@ -408,7 +408,7 @@ async function main() {
   // ---------------------------------------------------------------------
   // Static checks against the route source so they always run, even when
   // there's no live server. The runtime check below boots one.
-  const settingsRoute = await read("src/app/api/settings/llm/route.ts");
+  const settingsRoute = await read("src/_legacy_api/settings/llm/route.ts");
   assert(settingsRoute.includes('export async function GET'), "settings/llm: GET handler present");
   assert(settingsRoute.includes('export async function POST'), "settings/llm: POST handler present");
   // The route must never echo apiKey back onto the response payload.

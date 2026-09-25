@@ -35,9 +35,18 @@ public class SensorIngestValidator : AbstractValidator<IngestRequest>
 
 public class QcFlagRequestValidator : AbstractValidator<QcFlagRequest>
 {
+    // Mirrors the OPERATIONS whitelist from src/data/qc.defects.ts.
+    private static readonly HashSet<string> _operations = new(StringComparer.Ordinal)
+    {
+        "cutting", "sewing", "buttonhole", "top_stitch", "qc_inspection", "finishing"
+    };
+
     public QcFlagRequestValidator()
     {
-        RuleFor(x => x.Operation).NotEmpty().MaximumLength(64);
+        RuleFor(x => x.Operation)
+            .NotEmpty().MaximumLength(64)
+            .Must(op => _operations.Contains(op))
+            .WithMessage("unknown_operation");
         RuleFor(x => x.LineId).NotEmpty().MaximumLength(32);
         RuleFor(x => x.DefectRatePct).InclusiveBetween(0, 100).When(x => x.DefectRatePct.HasValue);
         RuleFor(x => x.ReworkRatePct).InclusiveBetween(0, 100).When(x => x.ReworkRatePct.HasValue);

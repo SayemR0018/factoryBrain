@@ -1,3 +1,5 @@
+using FactoryBrain.Api.Dtos.Vision;
+
 namespace FactoryBrain.Api.Dtos.Agents;
 
 public record AgentRunResponse(

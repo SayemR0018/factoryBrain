@@ -197,7 +197,7 @@ public sealed class AgentRunService : IAgentRunService
     /// Deterministic compressor duty recommendation — mirrors
     /// <c>factory.tools.recommend_energy_duty</c>.
     /// </summary>
-    private static (double Score, int CurrentDutyPct, int RecommendedDutyPct, double ExpectedKwhSaved, int LineCount, string Window)
+    private (double Score, int CurrentDutyPct, int RecommendedDutyPct, double ExpectedKwhSaved, int LineCount, string Window)
     RecommendEnergyDuty()
     {
         var s = _sensors.CurrentState;

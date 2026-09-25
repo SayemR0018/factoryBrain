@@ -15,6 +15,14 @@ namespace FactoryBrain.Api.Services;
 /// </summary>
 public sealed class SensorService : ISensorService
 {
+    // Static arrays must be declared BEFORE _state is initialized because the
+    // static field initializer calls Seed() which reads LINES / MACHINES.
+    private static readonly string[] LINES =
+        { "line-1", "line-2", "line-3", "line-4", "line-5", "line-6" };
+    private static readonly string[] MACHINES =
+        { "M-101", "M-102", "M-103", "M-104", "M-105", "M-201", "M-202", "M-203",
+          "M-204", "M-205", "M-206", "M-207", "M-208", "M-209", "M-210", "M-267" };
+
     private static readonly object _gate = new();
     private static SimState _state = Seed();
     private readonly FactoryBrainDbContext _db;
@@ -98,7 +106,8 @@ public sealed class SensorService : ISensorService
 
     private static IEnumerable<SensorReading> StepTick()
     {
-        int nextId = _state.NextId++;
+        // Tick-scoped RNG; readings use the global _state.NextId counter so IDs
+        // are unique across the whole process (multiple StepTicks per Ingest).
         var ts = DateTime.UtcNow;
         var rng = new Random(0xA11CE ^ (_state.Tick + 1));
 
@@ -115,7 +124,7 @@ public sealed class SensorService : ISensorService
             double v = Math.Round(p.Lo + rng.NextDouble() * (p.Hi - p.Lo), 2);
             var reading = new SensorReading
             {
-                Id = $"srv-sensor-{nextId++}",
+                Id = $"srv-sensor-{++_state.NextId}",
                 Source = p.Source,
                 EntityId = p.Entity,
                 Metric = p.Metric,
@@ -161,7 +170,7 @@ public sealed class SensorService : ISensorService
 
     private static SimState Seed()
     {
-        var rng = new Random(0xFA47_0001);
+        var rng = new Random(unchecked((int)0xFA47_0001));
         var lines = LINES.Select(id => new LineSim { Id = id,
             Efficiency = Math.Round(0.62 + rng.NextDouble() * 0.28, 3),
             Uptime     = Math.Round(0.86 + rng.NextDouble() * 0.13, 3),
@@ -178,13 +187,6 @@ public sealed class SensorService : ISensorService
 
         return new SimState(0, 1, lines, machines, new List<SensorReading>(), null);
     }
-
-    private static readonly string[] LINES =
-        { "line-1", "line-2", "line-3", "line-4", "line-5", "line-6" };
-
-    private static readonly string[] MACHINES =
-        Enumerable.Range(1, 6).SelectMany(l => Enumerable.Range(1, 6).Select(m => $"m-{l}-{m}"))
-                  .ToArray();
 
     private sealed class SimState
     {

@@ -1,5 +1,6 @@
 using FactoryBrain.Api.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 
 namespace FactoryBrain.Api.Data;
 
@@ -32,6 +33,7 @@ public class FactoryBrainDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder mb)
     {
         base.OnModelCreating(mb);
+        mb.HasPostgresExtension("vector");
         mb.ApplyConfigurationsFromAssembly(typeof(FactoryBrainDbContext).Assembly);
     }
 }

@@ -31,7 +31,7 @@ public sealed class EmbeddingService : IEmbeddingService
         foreach (var token in Tokenize(text))
         {
             if (string.IsNullOrEmpty(token)) continue;
-            int h = Hash(token) % d;
+            int h = Math.Abs(Hash(token)) % d;
             v[h] += 1f;
         }
         // L2 normalise

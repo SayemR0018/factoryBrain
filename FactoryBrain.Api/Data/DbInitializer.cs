@@ -464,7 +464,7 @@ public static class DbInitializer
         }
 
         // Orders (sample rows — heavy dataset; full 14k rows generated lazily)
-        var rng = new Random(0xF00D0001);
+        var rng = new Random(unchecked((int)0xF00D0001));
         string[] channels = { "shopify", "whatsapp", "facebook", "instagram", "direct" };
         for (int i = 0; i < 600; i++)
         {
@@ -495,7 +495,7 @@ public static class DbInitializer
     {
         var out0 = new List<string>();
         var d = DateTime.UtcNow;
-        int offsetToMonday = (int)((d.DayOfWeek + 6) % 7);
+        int offsetToMonday = ((int)d.DayOfWeek + 6) % 7;
         d = d.AddDays(-offsetToMonday);
         for (int i = 0; i < count; i++)
         {

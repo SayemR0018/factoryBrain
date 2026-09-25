@@ -29,6 +29,7 @@ using FactoryBrain.Api.Services;
 using FactoryBrain.Api.Services.Interfaces;
 using FactoryBrain.Api.Services.Rag;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 
 // 1. Load .env + .env.local (idempotent — missing files are tolerated).
 Env.Load(".env");
@@ -68,6 +69,7 @@ builder.Services.AddDbContext<FactoryBrainDbContext>(opts =>
     {
         npg.EnableRetryOnFailure(maxRetryCount: 3);
         npg.MigrationsHistoryTable("__ef_migrations");
+        npg.UseVector();
     });
     if (builder.Environment.IsDevelopment())
     {

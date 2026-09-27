@@ -12,9 +12,15 @@
 // Configuration loading order (later overrides earlier):
 //   1. appsettings.json
 //   2. appsettings.{Environment}.json
-//   3. .env  (DotNetEnv — shared with the Next.js frontend)
-//   4. .env.local (DotNetEnv — overrides .env)
-//   5. OS environment variables
+//   3. .env  (DotNetEnv — shared with the Next.js frontend; non-clobbering)
+//   4. .env.local (DotNetEnv — overrides .env; non-clobbering)
+//   5. OS environment variables (and anything the host sets before launch)
+//
+// IMPORTANT: both Env.Load calls below use LoadOptions(clobberExistingVars:
+// false) so a host-set env var (e.g. FACTORYBRAIN_DB on a Docker / CI box,
+// RAG_EMBEDDING_API_KEY on the operator's shell) always wins over what is
+// committed in .env. EnvReloader may still overwrite RAG_* values at runtime
+// in Development; see EnvReloader.cs for the prefix guard.
 //
 // RAG embedding providers (resolved at startup):
 //   RAG_EMBEDDING_PROVIDER = local | openai | gemini   (default: local)
@@ -30,6 +36,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 using DotNetEnv;
 using FactoryBrain.Api.Data;
 using FactoryBrain.Api.Middleware;
@@ -39,8 +46,14 @@ using FactoryBrain.Api.Services.Rag;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-Env.Load(".env");
-Env.Load(".env.local");
+// LoadOptions(clobberExistingVars: false) means: any variable the host
+// already set (FACTORYBRAIN_DB, ASPNETCORE_*, OS secrets, CI vars) keeps
+// its value. Variables ONLY present in the file are loaded. This is what
+// makes "FACTORYBRAIN_DB on the command line" actually win over the
+// committed `.env` — without it, the file would silently overwrite the
+// host's value on every restart.
+Env.Load(".env",        new LoadOptions(clobberExistingVars: false));
+Env.Load(".env.local",  new LoadOptions(clobberExistingVars: false));
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +69,26 @@ builder.Logging.AddSimpleConsole(o =>
 // ─── HTTP / JSON ───────────────────────────────────────────────────────────
 builder.Services
     .AddControllers()
+    // Coerce every [ApiController] model-binding failure (malformed JSON,
+    // empty body, [Required] misses, type mismatches) into the canonical
+    // {error:"ValidationError", details:"<field>: <message>; ..."} envelope.
+    // Without this the framework returns a default ValidationProblemDetails
+    // 400, which the rest of the API doesn't speak.
+    .ConfigureApiBehaviorOptions(o =>
+    {
+        o.InvalidModelStateResponseFactory = ctx =>
+        {
+            var details = string.Join("; ", ctx.ModelState
+                .Where(kvp => kvp.Value!.Errors.Count > 0)
+                .SelectMany(kvp => kvp.Value!.Errors
+                    .Select(e => $"{kvp.Key}: {e.ErrorMessage}")));
+            return new BadRequestObjectResult(new
+            {
+                error   = "ValidationError",
+                details
+            });
+        };
+    })
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;

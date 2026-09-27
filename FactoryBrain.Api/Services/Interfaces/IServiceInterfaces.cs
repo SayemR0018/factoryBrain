@@ -6,6 +6,7 @@ using FactoryBrain.Api.Dtos.Brief;
 using FactoryBrain.Api.Dtos.FloorAlerts;
 using FactoryBrain.Api.Dtos.LineBoard;
 using FactoryBrain.Api.Dtos.Qc;
+using FactoryBrain.Api.Dtos.Rag;
 using FactoryBrain.Api.Dtos.Sensors;
 using FactoryBrain.Api.Dtos.Settings;
 using FactoryBrain.Api.Dtos.Vision;
@@ -91,7 +92,55 @@ public interface IRagService
     /// configured <see cref="FactoryBrain.Api.Services.Rag.IEmbeddingService"/>.
     /// </summary>
     Task<bool> NeedsReindexAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Ingest a new document into the RAG index. Chunks the body with
+    /// <see cref="FactoryBrain.Api.Services.Rag.TextChunker"/>, embeds
+    /// each chunk with the configured embedder, and writes the row + its
+    /// chunks to <c>manual_documents</c>. In degraded mode the chunks are
+    /// stored with <c>Embedding = null</c> and
+    /// <c>EmbeddingProvider = "pending"</c> — they will be embedded by
+    /// the next non-degraded startup reindex or POST /api/rag/reindex.
+    /// </summary>
+    Task<IngestOutcome> IngestAsync(IngestInput input, CancellationToken ct = default);
+
+    /// <summary>
+    /// List the manual documents currently stored in the index. Pass a
+    /// non-null <paramref name="source"/> to filter by source
+    /// (<c>manual | sop | compliance | faq</c>). Embedding vectors are
+    /// never returned.
+    /// </summary>
+    Task<IReadOnlyList<DocumentListItem>> ListDocumentsAsync(string? source, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Inputs to <see cref="IRagService.IngestAsync"/>. Kept distinct from
+/// the wire DTO so the service layer doesn't drag an HTTP shape around.
+/// </summary>
+public sealed record IngestInput(
+    string Title,
+    string? TitleBn,
+    string Source,
+    IReadOnlyList<string> Tags,
+    string Content,
+    string? Url,
+    bool IsDemo
+);
+
+/// <summary>
+/// Result of a single ingest call. Mirrors
+/// <see cref="FactoryBrain.Api.Dtos.Rag.IngestResponse"/> but is safe to
+/// return from the service layer (no HTTP coupling).
+/// </summary>
+public sealed record IngestOutcome(
+    string DocumentId,
+    int Chunks,
+    string Provider,
+    string Model,
+    int Dims,
+    bool Embedded,
+    string? Warning
+);
 
 public sealed record SensorSimState(
     int Tick,

@@ -1,6 +1,8 @@
 using FactoryBrain.Api.Data;
+using FactoryBrain.Api.Dtos.Rag;
 using FactoryBrain.Api.Services.Interfaces;
 using FactoryBrain.Api.Services.Rag;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +17,20 @@ namespace FactoryBrain.Api.Controllers;
 ///     the canonical error envelope whenever the embedder is in
 ///     degraded mode OR an embedding call fails mid-batch (the DB is
 ///     never touched).
+///   </item>
+///   <item>
+///     <c>POST /api/rag/ingest</c> validates the body with
+///     <see cref="Validators.RagIngestRequestValidator"/>, chunks with
+///     the domain-aware <see cref="TextChunker"/>, embeds with the
+///     active configured embedder, and stores the row + chunks under
+///     <c>manual_documents</c>. In degraded mode the chunks are stored
+///     with <c>EmbeddingProvider = "pending"</c> so a subsequent reindex
+///     can fill them in; the response surfaces
+///     <c>embedded = false</c> + a <c>warning</c>.
+///   </item>
+///   <item>
+///     <c>GET /api/rag/documents</c> returns the manual-doc index without
+///     embedding vectors. Supports <c>?source=</c> filtering.
 ///   </item>
 ///   <item>
 ///     <c>GET /api/rag/status</c> returns
@@ -36,6 +52,7 @@ public class RagController : ControllerBase
     private readonly ILoggerFactory _loggerFactory;
     private readonly FactoryBrainDbContext _db;
     private readonly ILogger<RagController> _log;
+    private readonly IValidator<RagIngestRequest> _ingestValidator;
 
     public RagController(
         IRagService rag,
@@ -45,11 +62,12 @@ public class RagController : ControllerBase
         IHttpClientFactory http,
         ILoggerFactory loggerFactory,
         FactoryBrainDbContext db,
-        ILogger<RagController> log)
+        ILogger<RagController> log,
+        IValidator<RagIngestRequest> ingestValidator)
     {
         _rag = rag; _resolver = resolver; _admin = admin;
         _monitor = monitor; _http = http; _loggerFactory = loggerFactory;
-        _db = db; _log = log;
+        _db = db; _log = log; _ingestValidator = ingestValidator;
     }
 
     /// <summary>
@@ -138,6 +156,69 @@ public class RagController : ControllerBase
     }
 
     /// <summary>
+    /// POST /api/rag/ingest — validate the body, chunk it with the
+    /// domain-aware chunker, embed each chunk with the configured
+    /// embedder, and persist a new <c>ManualDocument</c> row + its
+    /// <c>DocumentChunk</c> children.
+    ///
+    /// <para>
+    /// In degraded mode the chunks are stored with
+    /// <c>EmbeddingProvider = "pending"</c> and <c>Embedding = null</c>
+    /// so a later reindex (startup or POST /api/rag/reindex) can fill
+    /// them in. The response surfaces <c>embedded = false</c> + a
+    /// human-readable <c>warning</c>.
+    /// </para>
+    /// </summary>
+    [HttpPost("ingest")]
+    public async Task<IActionResult> Ingest([FromBody] RagIngestRequest body, CancellationToken ct)
+    {
+        var validation = await _ingestValidator.ValidateAsync(body ?? new RagIngestRequest("", null, "", null, "", null), ct);
+        if (!validation.IsValid)
+        {
+            // Match the canonical {error, details} envelope; the
+            // middleware picks up everything that wasn't already a
+            // structured response.
+            var details = string.Join("; ", validation.Errors
+                .Select(e => $"{e.PropertyName}: {e.ErrorMessage}"));
+            return BadRequest(new { error = "ValidationError", details });
+        }
+
+        var outcome = await _rag.IngestAsync(new IngestInput(
+            Title:   body!.Title.Trim(),
+            TitleBn: string.IsNullOrWhiteSpace(body.TitleBn) ? null : body.TitleBn.Trim(),
+            Source:  body.Source.Trim().ToLowerInvariant(),
+            Tags:    body.Tags ?? new List<string>(),
+            Content: body.Content,
+            Url:     string.IsNullOrWhiteSpace(body.Url) ? null : body.Url.Trim(),
+            IsDemo:  false), ct);
+
+        _log.LogInformation(
+            "Ingested {DocId}: {Chunks} chunks (provider={Provider} model={Model} dims={Dims} embedded={Embedded}).",
+            outcome.DocumentId, outcome.Chunks, outcome.Provider, outcome.Model, outcome.Dims, outcome.Embedded);
+
+        return StatusCode(StatusCodes.Status201Created, new RagIngestResponse(
+            outcome.DocumentId,
+            outcome.Chunks,
+            outcome.Provider,
+            outcome.Model,
+            outcome.Dims,
+            outcome.Embedded,
+            outcome.Warning));
+    }
+
+    /// <summary>
+    /// GET /api/rag/documents — list every manual document currently in
+    /// the index, optionally filtered by <c>?source=</c>. Embedding
+    /// vectors are never returned. Newest rows first.
+    /// </summary>
+    [HttpGet("documents")]
+    public async Task<IActionResult> ListDocuments([FromQuery] string? source, CancellationToken ct)
+    {
+        var docs = await _rag.ListDocumentsAsync(source, ct);
+        return Ok(docs);
+    }
+
+    /// <summary>
     /// GET /api/rag/status — shows the active and configured embedder
     /// config plus the most-recent probe state and the number of rows
     /// that would be re-embedded by the next reindex. Never includes
@@ -177,10 +258,17 @@ public class RagController : ControllerBase
 
     private int ComputePendingCount(EmbeddingConfig configured)
     {
-        if (_resolver.IsDegraded) return 0;
-        // Count documents whose stored metadata disagrees with the active
-        // configured embedder OR whose stored provider is "pending" OR
-        // any of whose chunks have a null Embedding.
+        // Count every document that the next non-degraded reindex would
+        // touch: stored provider is "pending", stored provider/model/dims
+        // disagrees with the active configured embedder, OR any chunk has
+        // a null Embedding (the reindex pipeline will fill those in).
+        //
+        // When the resolver is degraded we still emit a count: any doc
+        // stamped "pending" or with a null chunk embedding is a backlog
+        // item the next healthy reindex will process. Docs whose stored
+        // metadata matches the configured embedder (the only thing a
+        // healthy run could compare against) simply don't match those
+        // first three clauses and fall out of the count — same as before.
         try
         {
             return _db.ManualDocuments.AsNoTracking()

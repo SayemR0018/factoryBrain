@@ -323,3 +323,19 @@ section 5 above).
   configured hosted provider is missing its API key or its embedding call
   fails), `/api/ask` returns `denseScore = 0` for every hit and the results
   are BM25-only ranking.
+- With Gemini and no key, `GET /api/rag/status` leaves out `lastProbeAt`
+  and `lastProbeOk`.
+- The startup warning in the Gemini-with-no-key case prints a stack trace.
+  It never includes the key.
+- The `.env.local` reload only happens in Development and only overwrites
+  variables still in the file. Deleting `RAG_EMBEDDING_FAKE_FAIL` leaves
+  the old value in place, so set it to `false` instead of deleting the line.
+- Databases upgraded from a legacy build keep their original 9 chunks per
+  document; the new domain-aware chunker does not retroactively re-chunk
+  existing rows. To repopulate with the new chunker, delete the affected
+  rows from `manual_documents` and re-ingest them via `POST /api/rag/ingest`.
+  `POST /api/rag/reindex` only re-embeds the chunks it finds and never
+  re-splits the text.
+- On a fresh database with a non-local provider, the 8 base seed documents
+  are stamped local/384 and aren't realigned until the next reindex,
+  though pendingCount flags them.

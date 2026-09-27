@@ -1,2 +1,10 @@
+# Keep .env files out of Docker images. The root .env and any nested
+# .env file (e.g. apps/api/.env, services/*/.env) must never be baked
+# into a published image — they typically contain DATABASE URLs with
+# passwords, API keys, and operator secrets. Configure secrets via the
+# container orchestrator's secret store instead. .env.local is excluded
+# for the same reason; .env.example is intentionally allowed so the
+# example file ships with the image.
 .env
+**/.env
 .env.local

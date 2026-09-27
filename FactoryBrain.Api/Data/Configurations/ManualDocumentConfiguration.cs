@@ -18,6 +18,12 @@ public class ManualDocumentConfiguration : IEntityTypeConfiguration<ManualDocume
         b.Property(x => x.EmbeddingProvider).IsRequired();
         b.Property(x => x.EmbeddingModel).IsRequired();
         b.Property(x => x.Dims).IsRequired();
+        // Added by the AddIngestMetadata migration for the new
+        // /api/rag/ingest endpoint + RMG demo corpus.
+        b.Property(x => x.Url).HasMaxLength(2048);
+        b.Property(x => x.IsDemo).IsRequired();
+        b.Property(x => x.CreatedAt).IsRequired();
+        b.HasIndex(x => x.Source);
         b.HasMany(x => x.Chunks)
             .WithOne()
             .HasForeignKey(c => c.DocumentId)

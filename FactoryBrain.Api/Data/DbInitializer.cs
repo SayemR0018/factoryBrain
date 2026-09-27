@@ -32,6 +32,7 @@ public static class DbInitializer
         await SeedAgentsAsync(db, ct);
         await SeedPoliciesAsync(db, ct);
         await SeedManualsAsync(db, rag, embedder, ct);
+        await SeedRmgDemoCorpusAsync(db, rag, ct);
         await SeedLineBoardAsync(db, ct);
         await SeedSensorReadingsAsync(db, ct);
         await SeedQcDefectsAsync(db, ct);
@@ -220,6 +221,371 @@ public static class DbInitializer
         }
         await db.SaveChangesAsync(ct);
     }
+
+    // --- RMG demo corpus (idempotent) -------------------------------------
+    /// <summary>
+    /// Idempotent RMG demo corpus. Every row has <c>IsDemo = true</c> and
+    /// either a title prefix or a tag of <c>Demo</c> so the UI / list API
+    /// can mark them clearly. Seeds a needle-breakage SOP, AQL 1.5 +
+    /// AQL 2.5 sampling tables, Juki / Brother lockstitch error-code
+    /// tables (clearly labelled demo, not vendor manuals), an
+    /// ACCORD / RSC-style fire + electrical safety checklist, SMV + DHU
+    /// definitions with a worked example, and a Bangla FAQ of 10 Q&amp;A
+    /// pairs covering line efficiency, needle breakage and AQL.
+    ///
+    /// <para>
+    /// Idempotency is per-row: each doc has a stable id
+    /// (<c>demo-needle-sop</c> etc.); rows that already exist are
+    /// skipped on every subsequent boot, so re-running the API does
+    /// not duplicate chunks.
+    /// </para>
+    /// </summary>
+    private static async Task SeedRmgDemoCorpusAsync(
+        FactoryBrainDbContext db, IRagService rag, CancellationToken ct)
+    {
+        var seeds = new[]
+        {
+            DemoNeedleBreakageSOP(),
+            DemoAql15Table(),
+            DemoAql25Table(),
+            DemoJukiErrorTable(),
+            DemoBrotherErrorTable(),
+            DemoAccordFireSafety(),
+            DemoSmvDhuDefinition(),
+            DemoBanglaFaq(),
+        };
+
+        int added = 0;
+        foreach (var seed in seeds)
+        {
+            if (await db.ManualDocuments.AnyAsync(d => d.Id == seed.Id, ct)) continue;
+            var chunks = await rag.ChunkAsync(
+                seed.Id, seed.Title, seed.Body, seed.Tags, seed.Department, seed.Category, ct);
+            var doc = new ManualDocument
+            {
+                Id = seed.Id,
+                TitleEn = seed.Title,
+                TitleBn = string.Empty,
+                Tags = seed.Tags,
+                BodyEn = seed.Body,
+                BodyBn = string.Empty,
+                Source = seed.Source,
+                Department = seed.Department,
+                Category = seed.Category,
+                Url = null,
+                CreatedAt = DateTime.UtcNow,
+                IsDemo = true,
+                // The active embedder stamps the row's metadata so the
+                // next NeedsReindexAsync check picks up drift. In
+                // degraded mode the chunk's Embedding is null and the
+                // row is marked pending; the next non-degraded reindex
+                // fills the vectors.
+                EmbeddingProvider = seed.ActiveProvider ?? "local",
+                EmbeddingModel    = seed.ActiveModel    ?? "hash-md5",
+                Dims              = seed.ActiveDims
+            };
+            foreach (var c in chunks) doc.Chunks.Add(c);
+            db.ManualDocuments.Add(doc);
+            added++;
+        }
+        if (added > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    private sealed record DemoSeed(
+        string Id,
+        string Title,
+        string Body,
+        List<string> Tags,
+        string Source,
+        string Department,
+        string Category,
+        string? ActiveProvider = null,
+        string? ActiveModel    = null,
+        int     ActiveDims     = 384);
+
+    private static DemoSeed DemoNeedleBreakageSOP() => new(
+        Id: "demo-needle-breakage-sop",
+        Title: "Demo · Needle-breakage SOP (lockstitch machines)",
+        Body:
+            "# Needle-breakage SOP — lockstitch machines (DEMO, not a vendor manual)\n\n" +
+            "This demo SOP lists the top causes of needle breakage on lockstitch heads (Juki DDL-8700, " +
+            "Brother DB2-B755) and the field fixes mechanics apply first. Always isolate the machine " +
+            "electrically before touching the needle bar.\n\n" +
+            "## 1. Cause → fix table\n\n" +
+            "- Wrong needle size for fabric: switch to Nm 70 for light knits (180–220 gsm), Nm 80 for " +
+            "  mid-weight (220–280 gsm), Nm 90 for denim (320+ gsm). Needle DBx1 / 134 family only.\n" +
+            "- Needle inserted backwards (long groove faces the bobbin): the long groove must face the " +
+            "  operator side. Reverse and re-thread.\n" +
+            "- Needle installed too high: the top of the eye should sit ~1 mm below the hook point at " +
+            "  needle-down position. Re-set with the standard gauge.\n" +
+            "- Burr on the needle plate or bobbin hook: replace the plate; stone the hook lightly with " +
+            "  3000-grit, then re-lap with sewing-machine oil.\n" +
+            "- Tight thread tension (top > 3.5 N or bobbin > 2.5 N): drop both by 0.3 N, run five " +
+            "  stitches, re-measure.\n" +
+            "- Worn needle bar / bent needle bar: replace the bar. Re-check parallelism with the hook.\n\n" +
+            "## 2. Quick checks before changing the needle\n\n" +
+            "1. Pull the fabric path taut by hand and look for the broken-needle tip in the feed dog.\n" +
+            "2. Count broken bits in the bobbin case — a third piece means a guard is missing.\n" +
+            "3. Run the head at 200 RPM with no fabric for 10 s; listen for metallic click = hook strike.\n\n" +
+            "## 3. Documenting the fix\n\n" +
+            "Open an Insight with title \"Needle breakage — {line} {head}\", attach the head's vibration " +
+            "RMS (last 30 min) and the fabric lot, and route to maintenance. SMV impact: a single " +
+            "broken needle averages 90–180 seconds of downtime, so a spike of 5+ breakages/shift is " +
+            "a 12–25 minute efficiency drag worth an investigation card.\n\n" +
+            "Tags: demo, sewing, needle, juki ddl-8700, brother db2-b755, smv 0.45, smv 0.55.",
+        Tags: new() { "demo", "sewing", "needle", "juki ddl-8700", "brother db2-b755", "smv:0.45", "smv:0.55" },
+        Source: "sop", Department: "sewing", Category: "sop");
+
+    private static DemoSeed DemoAql15Table() => new(
+        Id: "demo-aql-1.5-sampling",
+        Title: "Demo · AQL 1.5 sampling — single sampling plan (normal inspection)",
+        Body:
+            "# AQL 1.5 sampling plan (DEMO)\n\n" +
+            "Acceptance Quality Limit 1.5% is the most common cut for premium / safety-critical " +
+            "shipments (children's wear, technical outerwear, intimate apparel). Use the locked " +
+            "tables below for normal inspection; switch to tightened when 2 of any 5 consecutive " +
+            "lots are rejected, and to reduced when 5 of 5 are accepted.\n\n" +
+            "## Sample sizes and accept / reject numbers (AQL 1.5, normal inspection)\n\n" +
+            "- Lot 26–50: sample 8, accept 0, reject 1.\n" +
+            "- Lot 51–90: sample 13, accept 0, reject 1.\n" +
+            "- Lot 91–150: sample 20, accept 0, reject 1.\n" +
+            "- Lot 151–280: sample 32, accept 1, reject 2.\n" +
+            "- Lot 281–500: sample 50, accept 1, reject 2.\n" +
+            "- Lot 501–1200: sample 80, accept 2, reject 3.\n" +
+            "- Lot 1201–3200: sample 125, accept 3, reject 4.\n" +
+            "- Lot 3201–10000: sample 200, accept 5, reject 6.\n" +
+            "- Lot 10001–35000: sample 315, accept 7, reject 8.\n\n" +
+            "## Reading the table\n\n" +
+            "Sample size is the number of units pulled at random from the lot. Accept = the number " +
+            "of defectives allowed; reject = the number that flips the lot to a reject decision. AQL " +
+            "1.5 means up to 1.5% defective is acceptable in the long run.\n\n" +
+            "## When to switch plans\n\n" +
+            "Switch to tightened (move one row down the table) after 2 of 5 consecutive lots are " +
+            "rejected on original inspection. Switch back to normal after 5 accepted lots on " +
+            "tightened. Use skip-lot only after 10 consecutive accepted lots on tightened.",
+        Tags: new() { "demo", "qc", "aql", "aql:1.5", "compliance" },
+        Source: "sop", Department: "qc", Category: "qc");
+
+    private static DemoSeed DemoAql25Table() => new(
+        Id: "demo-aql-2.5-sampling",
+        Title: "Demo · AQL 2.5 sampling — single sampling plan (normal inspection)",
+        Body:
+            "# AQL 2.5 sampling plan (DEMO)\n\n" +
+            "AQL 2.5% is the default for general apparel export. Use the tables below for normal " +
+            "inspection; switch to tightened or reduced per the switching rules in the AQL 1.5 " +
+            "document. The same sample-size brackets apply; only the accept / reject numbers change.\n\n" +
+            "## Sample sizes and accept / reject numbers (AQL 2.5, normal inspection)\n\n" +
+            "- Lot 26–50: sample 8, accept 0, reject 1.\n" +
+            "- Lot 51–90: sample 13, accept 0, reject 1.\n" +
+            "- Lot 91–150: sample 20, accept 0, reject 1.\n" +
+            "- Lot 151–280: sample 32, accept 1, reject 2.\n" +
+            "- Lot 281–500: sample 50, accept 2, reject 3.\n" +
+            "- Lot 501–1200: sample 80, accept 3, reject 4.\n" +
+            "- Lot 1201–3200: sample 125, accept 5, reject 6.\n" +
+            "- Lot 3201–10000: sample 200, accept 7, reject 8.\n" +
+            "- Lot 10001–35000: sample 315, accept 10, reject 11.\n\n" +
+            "## Common pitfalls\n\n" +
+            "1. Pulling the sample from the top of a bale — always pull from at least three layers.\n" +
+            "2. Reading the lot code instead of the lot size — verify physical bale count before " +
+            "   selecting the row.\n" +
+            "3. Recording defects as 'minor' when the buyer specifies major/minor split — both must " +
+            "   be counted against AQL.\n\n" +
+            "## Documentation\n\n" +
+            "Open a QC inspection card with lot code, sample size, accept / reject numbers, defect " +
+            "category breakdown (stitch skip, open seam, oil stain, shading, measurement), and the " +
+            "inspector's badge id. Route the card to the floor QC supervisor before disposition.",
+        Tags: new() { "demo", "qc", "aql", "aql:2.5", "compliance" },
+        Source: "sop", Department: "qc", Category: "qc");
+
+    private static DemoSeed DemoJukiErrorTable() => new(
+        Id: "demo-juki-error-codes",
+        Title: "Demo · Juki lockstitch error-code table (DDL-8700 family)",
+        Body:
+            "# Juki lockstitch error-code table — DDL-8700 family (DEMO)\n\n" +
+            "This is a demo, condensed reference for the most common Juki DDL-8700 / DDL-9000C " +
+            "lockstitch alarms. Always confirm with the vendor manual before changing boards or " +
+            "stepper drives.\n\n" +
+            "## E-01 — needle-up position not detected\n\n" +
+            "- Cause: needle position sensor misaligned or covered in lint.\n" +
+            "- Fix: clean the sensor with a dry brush, then re-seat the connector on the control " +
+            "  board. Run a needle-up / needle-down cycle and verify the LED on the sensor flips.\n\n" +
+            "## E-02 — thread trimmer blade timeout\n\n" +
+            "- Cause: trim cam out of phase, or blade solenoid sticking.\n" +
+            "- Fix: reset the trim cam with the handwheel (align the yellow dot to the index mark), " +
+            "  then run the head at 200 RPM for 10 s. If the alarm persists, replace the solenoid.\n\n" +
+            "## E-12 — bobbin-winder over-current\n\n" +
+            "- Cause: bobbin wound too tightly, or winder spring fatigued.\n" +
+            "- Fix: discard the over-tight bobbin, loosen the winder spring tension by one click, " +
+            "  rewind. If the alarm repeats on a fresh bobbin, replace the winder assembly.\n\n" +
+            "## ALARM — foot-lift sensor stuck\n\n" +
+            "- Cause: foot-lift pedal lever loose, or sensor cable chafed at the pivot.\n" +
+            "- Fix: re-tension the pedal return spring, inspect the cable at the pivot, replace if " +
+            "  the outer jacket is cracked.\n\n" +
+            "## FAULT — stepper drive over-temperature\n\n" +
+            "- Cause: cooling fan filter blocked, ambient > 38 °C, or stitch rate held at 4500 RPM.\n" +
+            "- Fix: clean the fan filter, drop the programmed max stitch rate to 4000 RPM, verify " +
+            "  ambient with the floor thermometer. Replace the drive only after the above is " +
+            "  confirmed.",
+        Tags: new() { "demo", "sewing", "juki ddl-8700", "error-code" },
+        Source: "sop", Department: "sewing", Category: "sop");
+
+    private static DemoSeed DemoBrotherErrorTable() => new(
+        Id: "demo-brother-error-codes",
+        Title: "Demo · Brother lockstitch error-code table (BAS-311H / DB2-B755)",
+        Body:
+            "# Brother lockstitch error-code table — BAS-311H / DB2-B755 (DEMO)\n\n" +
+            "Demo, condensed reference for the most common Brother lockstitch alarms. Confirm with " +
+            "the vendor manual before swapping control boards.\n\n" +
+            "## Err-401 — bobbin thread exhaustion\n\n" +
+            "- Cause: bobbin ran out mid-seam; rarely a false trip from a loose bobbin case.\n" +
+            "- Fix: insert a fresh bobbin (class L for BAS-311H, class SA for DB2-B755), re-thread " +
+            "  the bobbin case, run three stitches and verify the under-thread tension reads " +
+            "  between 0.20–0.25 N on the gauge.\n\n" +
+            "## E-01 — needle bar over-travel\n\n" +
+            "- Cause: needle clamp loose, or hook timing out of spec.\n" +
+            "- Fix: power-cycle, handwheel the head to needle-down, verify the needle bar clamp is " +
+            "  torqued to 1.8 N·m. Re-check hook timing with the 0.8 mm gauge; adjust if needed.\n\n" +
+            "## E-02 — presser-foot lift sensor fault\n\n" +
+            "- Cause: sensor magnet demagnetised (typical after 4+ years of thermal cycling).\n" +
+            "- Fix: replace the presser-foot lift sensor assembly (Brother PN S-37120-001). Run " +
+            "  five lift cycles and confirm the LED indicator flips twice per cycle.\n\n" +
+            "## ALARM — thread-break upper\n\n" +
+            "- Cause: thread guide eyelet misaligned, top tension too high, or thread lot " +
+            "  contaminated with lint.\n" +
+            "- Fix: re-thread through every guide, drop the top tension to 2.5 N, swap to a fresh " +
+            "  thread cone. If alarms repeat with two thread lots in a row, inspect the rotary " +
+            "  tension disc for nicks.\n\n" +
+            "## FAULT — main shaft encoder skip\n\n" +
+            "- Cause: encoder disc dirty, or belt slip between the motor and the main shaft.\n" +
+            "- Fix: clean the encoder disc with isopropyl alcohol, re-tension the belt to 35 N " +
+            "  deflection, run a 200-RPM idle for 30 s. Replace the encoder only after both fail.",
+        Tags: new() { "demo", "sewing", "brother bas-311h", "error-code" },
+        Source: "sop", Department: "sewing", Category: "sop");
+
+    private static DemoSeed DemoAccordFireSafety() => new(
+        Id: "demo-accord-fire-safety-checklist",
+        Title: "Demo · ACCORD / RSC fire & electrical safety checklist",
+        Body:
+            "# ACCORD / RSC fire & electrical safety checklist (DEMO)\n\n" +
+            "Demo checklist inspired by the Accord and RSC fire, electrical and building safety " +
+            "programmes for Bangladesh RMG factories. Always refer to the latest Accord / RSC " +
+            "guidance before signing off an audit; this is a working aid, not a substitute.\n\n" +
+            "## 1. Fire detection and alarm\n\n" +
+            "- Addressable smoke detectors in every cutting, sewing and finishing hall, max 9 m " +
+            "  spacing on straight runs.\n" +
+            "- Manual call points at every stair tower exit, max 45 m apart.\n" +
+            "- Alarm sounders audible at 65 dB(A) at every workstation; tested weekly with a " +
+            "  logged drill.\n" +
+            "- Fire pump room on a dedicated circuit; jockey pump runs continuously, main pump " +
+            "  cuts in within 30 s of pressure drop.\n\n" +
+            "## 2. Means of egress\n\n" +
+            "- Two remote exits from every hall; travel distance max 30 m.\n" +
+            "- Exit signs lit continuously, even on power loss (battery backup ≥ 90 minutes).\n" +
+            "- Stair towers enclosed in 2-hour fire-rated construction; no storage under the " +
+            "  stairs.\n" +
+            "- Exit doors open in the direction of egress, no locks requiring keys or special " +
+            "  knowledge during occupancy.\n\n" +
+            "## 3. Electrical safety\n\n" +
+            "- Main panel labelled, every breaker labelled, no double-lugged breakers.\n" +
+            "- ELCB / RCCB on every socket-outlet circuit; trip current 30 mA for general, 10 mA " +
+            "  for wet areas.\n" +
+            "- Cable trays off the floor; no cables through doorways or under rugs.\n" +
+            "- Earthing continuity tested annually; record on every machine's maintenance card.\n\n" +
+            "## 4. Fire suppression\n\n" +
+            "- Wet-riser / hydrant system sized for 4500 l/min at the most remote hydrant.\n" +
+            "- Sprinkler coverage in storage racks ≥ 7.5 m high, K-factor matched to commodity.\n" +
+            "- Portable extinguishers: CO₂ for electrical, dry powder for finished-goods storage, " +
+            "  water-mist for cutting halls.\n\n" +
+            "## 5. Documentation\n\n" +
+            "- Monthly self-audit signed by the factory manager and the safety officer.\n" +
+            "- Quarterly third-party audit by an Accord / RSC approved firm.\n" +
+            "- Every corrective action with a 30-day due date logged in the safety register.\n",
+        Tags: new() { "demo", "compliance", "fire-safety", "electrical", "accord", "rsc" },
+        Source: "compliance", Department: "general", Category: "compliance");
+
+    private static DemoSeed DemoSmvDhuDefinition() => new(
+        Id: "demo-smv-dhu-definition",
+        Title: "Demo · SMV & DHU definitions with a worked example",
+        Body:
+            "# SMV & DHU definitions (DEMO)\n\n" +
+            "Two of the most-quoted production-engineering numbers in apparel — SMV and DHU — " +
+            "mean very different things and are easy to swap. This is a working definition, not a " +
+            "substitute for the buyer-specific manuals.\n\n" +
+            "## SMV — Standard Minute Value\n\n" +
+            "SMV is the time, in standard minutes, that a qualified operator working at 100% " +
+            "efficiency takes to complete one garment on one operation. It is the building block " +
+            "for line balancing and SAH (Standard Allowed Hours) calculation. Typical knit-top SMV " +
+            "ranges:\n\n" +
+            "- SMV 0.45 — light polo tee, basic side seam + hem.\n" +
+            "- SMV 0.55 — polo with placket, cuff attach.\n" +
+            "- SMV 0.65 — full-fashion tee with neck rib and 2-needle coverstitch hem.\n" +
+            "- SMV 0.75 — hoodie with kangaroo pocket and hood attach.\n\n" +
+            "## DHU — Defects per Hundred Units\n\n" +
+            "DHU counts the number of defects found per 100 garments inspected (or produced, " +
+            "depending on the buyer). It is the inverse of quality yield: a 28 DHU line produces " +
+            "28 defects per 100 garments inspected, i.e. a quality yield of 72%.\n\n" +
+            "## Worked example\n\n" +
+            "An 8-hour shift, 30 operators, producing polo tees with SMV 0.55.\n\n" +
+            "1. Total available minutes = 30 operators × 8 h × 60 min × efficiency.\n" +
+            "2. At 75% line efficiency: 30 × 8 × 60 × 0.75 = 10 800 standard minutes available.\n" +
+            "3. Output at SAH = available / SMV = 10 800 / 0.55 = 19 636 garments.\n" +
+            "4. Bundles per minute (assuming 10 garments / bundle) = 19 636 / (8 h × 60 min × 10) " +
+            "   = 4.09 bundles / min, well below the SAH 22 target for SMV 0.45 lines.\n" +
+            "5. QC inspects 800 garments, finds 24 defects: DHU = (24 / 800) × 100 = 3.0.\n\n" +
+            "The line is running well below throughput target and quality is healthy. The first " +
+            "lever to pull is operator balance, not quality — at this DHU the rework cost is " +
+            "negligible compared to the throughput gap.",
+        Tags: new() { "demo", "production-engineering", "smv", "dhu", "sah" },
+        Source: "manual", Department: "general", Category: "sop");
+
+    private static DemoSeed DemoBanglaFaq() => new(
+        Id: "demo-bangla-rag-faq",
+        Title: "Demo · বাংলা FAQ — লাইন দক্ষতা, সুই ভাঙা ও AQL",
+        Body:
+            "# বাংলা FAQ — লাইন দক্ষতা, সুই ভাঙা ও AQL (DEMO)\n\n" +
+            "নিচে বাংলায় প্রায়শই জিজ্ঞাসিত প্রশ্ন ও উত্তরগুলো দেওয়া হলো। এগুলো শুধুমাত্র " +
+            "ডেমো — চূড়ান্ত সিদ্ধান্তের আগে সুপারভাইজার বা কোয়ালিটি লিডের সাথে যাচাই করুন।\n\n" +
+            "## ১. লাইন দক্ষতা কীভাবে বাড়াবো?\n" +
+            "প্রথমে বটলনেক অপারেশন চিহ্নিত করুন। SAH লক্ষ্যের সাথে প্রকৃত আউটপুট তুলনা করুন। " +
+            "বান্ডল স্ক্যান রেট, সুই ব্রেকেজ ও কিউসি ব্যাকলগ একসাথে দেখুন। সাধারণত সেলাই সহায়ক " +
+            "বরাদ্দ ঠিক করলেই ৫–১০% দক্ষতা ফিরে পাওয়া যায়।\n\n" +
+            "## ২. SMV কী?\n" +
+            "SMV হলো Standard Minute Value — একজন যোগ্য অপারেটর ১০০% দক্ষতায় একটি গার্মেন্টের " +
+            "একটি অপারেশন সম্পন্ন করতে যে সময় নেয়, সেটি standard minute এ। লাইন ব্যালান্সিং ও " +
+            "SAH হিসাবের ভিত্তি এটি।\n\n" +
+            "## ৩. DHU কী?\n" +
+            "DHU হলো Defects per Hundred Units — প্রতি ১০০ গার্মেন্টে কতটি ডিফেক্ট পাওয়া " +
+            "গেছে। ২৮ DHU মানে ১০০ গার্মেন্টে ২৮টি ডিফেক্ট, বা কোয়ালিটি ইয়েল্ড ৭২%।\n\n" +
+            "## ৪. সুই বারবার ভাঙছে, প্রথমে কী দেখব?\n" +
+            "প্রথমে সুই সাইজ ও ফ্যাব্রিকের মিল দেখুন — হালকা নিটে Nm 70, মিড-ওয়েটে Nm 80, " +
+            "ডেনিমে Nm 90। সুই বিপরীত দিকে ঢোকানো আছে কিনা দেখুন (লম্বা খাঁজ অপারেটরের দিকে " +
+            "হতে হবে)। তারপর সুই প্লেট ও ববিন হুকে burr আছে কিনা পরীক্ষা করুন।\n\n" +
+            "## ৫. AQL 1.5 আর AQL 2.5 এর পার্থক্য কী?\n" +
+            "AQL 1.5 বেশি কঠোর — দীর্ঘমেয়াদে ১.৫% পর্যন্ত ডিফেক্ট গ্রহণযোগ্য। প্রিমিয়াম ও " +
+            "নিরাপত্তা-সংক্রান্ত পণ্যে (শিশুদের পোশাক, ইন্টিমেট অ্যাপারেল) এটি ব্যবহার করা হয়। " +
+            "AQL 2.5 হলো সাধারণ অ্যাপারেল এক্সপোর্টের ডিফল্ট। স্যাম্পল সাইজের ব্র্যাকেট একই, " +
+            "শুধু accept / reject সংখ্যা আলাদা।\n\n" +
+            "## ৬. প্রিমিয়াম শিপমেন্টে কোন AQL?\n" +
+            "সাধারণত AQL 1.5 ব্যবহার করা হয়। বায়ার চুক্তিতে অন্য কিছু উল্লেখ না থাকলে AQL " +
+            "1.5, normal inspection ডিফল্ট।\n\n" +
+            "## ৭. বান্ডল প্রতি মিনিট লক্ষ্য কীভাবে বের করব?\n" +
+            "SAH লক্ষ্য দিয়ে শুরু করুন — SMV 0.45 তে SAH 22 bundles/min, SMV 0.75 এ SAH 13 " +
+            "bundles/min। লক্ষ্যের ৮০% এর নিচে ৩০+ মিনিট থাকলে সহায়ক বরাদ্দ পুনর্বণ্টন করুন।\n\n" +
+            "## ৮. সুই ভাঙলে ডাউনটাইম কত?\n" +
+            "একটি সুই ভাঙলে গড়ে ৯০–১৮০ সেকেন্ড ডাউনটাইম হয়। এক শিফটে ৫+ সুই ভাঙা মানে ১২–২৫ " +
+            "মিনিট দক্ষতা হারানো — এটি একটি তদন্ত কার্ড খোলার মতো ঘটনা।\n\n" +
+            "## ৯. AQL পাস করলে কি সব গার্মেন্ট ছাড়া যাবে?\n" +
+            "হ্যাঁ, AQL পাস মানে লটটি গ্রহণযোগ্য। তবে বায়ার চুক্তিতে বিশেষ কোনো শর্ত থাকলে " +
+            "(যেমন critical defects zero tolerance) সেগুলো আলাদাভাবে দেখতে হবে।\n\n" +
+            "## ১০. লাইন ৩ এ দক্ষতা কমে গেলে প্রথমে কী করব?\n" +
+            "প্রথমে সেলাই সহায়ক বরাদ্দ দেখুন — বান্ডল স্ক্যান রেট কমে গেছে কিনা যাচাই করুন। " +
+            "তারপর কিউসি ব্যাকলগ ও ফিনিশিং স্টেশনের ড্রায়ার সাইকেল দেখুন। সাধারণত এই তিনটি " +
+            "জায়গায় ৯০% ক্ষেত্রে সমাধান পাওয়া যায়।",
+        Tags: new() { "demo", "faq", "bangla", "line-efficiency", "needle", "aql" },
+        Source: "faq", Department: "general", Category: "policy");
 
     // --- line-board -------------------------------------------------------
     private static async Task SeedLineBoardAsync(FactoryBrainDbContext db, CancellationToken ct)

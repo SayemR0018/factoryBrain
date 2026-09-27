@@ -18,6 +18,13 @@ public class ManualDocument
     public string Department { get; set; } = "general";
     public string Category { get; set; } = "manuals";
 
+    // Embedding metadata columns are added by the AddEmbeddingMetadata
+    // migration. They're required in the C# model (with safe defaults) so
+    // RagService + DbInitializer can stamp them after every reindex.
+    public string EmbeddingProvider { get; set; } = "local";
+    public string EmbeddingModel { get; set; } = "hash-md5";
+    public int Dims { get; set; } = 384;
+
     public List<DocumentChunk> Chunks { get; set; } = new();
 }
 

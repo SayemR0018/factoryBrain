@@ -1,6 +1,7 @@
 using FactoryBrain.Api.Domain.Entities;
 using FactoryBrain.Api.Domain.Enums;
 using FactoryBrain.Api.Services.Interfaces;
+using FactoryBrain.Api.Services.Rag;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,10 +27,11 @@ public static class DbInitializer
         await using var scope = sp.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FactoryBrainDbContext>();
         var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
+        var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
 
         await SeedAgentsAsync(db, ct);
         await SeedPoliciesAsync(db, ct);
-        await SeedManualsAsync(db, rag, ct);
+        await SeedManualsAsync(db, rag, embedder, ct);
         await SeedLineBoardAsync(db, ct);
         await SeedSensorReadingsAsync(db, ct);
         await SeedQcDefectsAsync(db, ct);
@@ -136,7 +138,7 @@ public static class DbInitializer
 
     // --- manuals + chunks (RAG index) -----------------------------------
     private static async Task SeedManualsAsync(
-        FactoryBrainDbContext db, IRagService rag, CancellationToken ct)
+        FactoryBrainDbContext db, IRagService rag, IEmbeddingService embedder, CancellationToken ct)
     {
         if (await db.ManualDocuments.AnyAsync(ct)) return;
 
@@ -206,7 +208,11 @@ public static class DbInitializer
                 BodyBn = s.BodyBn,
                 Source = s.Source,
                 Department = s.Dept,
-                Category = s.Cat
+                Category = s.Cat,
+                // Stamp the active embedder so NeedsReindexAsync can detect drift later.
+                EmbeddingProvider = embedder.ProviderId,
+                EmbeddingModel    = embedder.ModelId,
+                Dims              = embedder.Dimensions
             };
             var chunks = await rag.ChunkAsync(docId, s.TitleEn, s.BodyEn, s.Tags, s.Dept, s.Cat, ct);
             foreach (var c in chunks) doc.Chunks.Add(c);

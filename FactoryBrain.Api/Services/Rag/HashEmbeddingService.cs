@@ -4,25 +4,25 @@ using Pgvector;
 
 namespace FactoryBrain.Api.Services.Rag;
 
-public interface IEmbeddingService
-{
-    Vector Embed(string text, int dimensions = 384);
-}
-
 /// <summary>
 /// Deterministic local embedder used when no hosted provider is configured.
-/// Hashes tokens into a stable 384-d vector so the RAG index stays reproduci-
-/// ble — same input → same vector. Mirrors the inline token-frequency hash
-/// embedder originally inside <c>src/services/rag/vector-store.ts</c>.
+/// Hashes tokens into a stable 384-d vector so the RAG index stays
+/// reproducible — same input → same vector. This is the byte-for-byte
+/// equivalent of the original <c>EmbeddingService</c>, preserved as the
+/// offline / demo fallback.
 /// </summary>
-public sealed class EmbeddingService : IEmbeddingService
+public sealed class HashEmbeddingService : IEmbeddingService
 {
     private readonly int _dims;
 
-    public EmbeddingService(IConfiguration cfg)
+    public HashEmbeddingService(int dims = 384)
     {
-        _dims = int.TryParse(cfg["Rag:EmbeddingDimensions"], out var d) ? d : 384;
+        _dims = dims > 0 ? dims : 384;
     }
+
+    public string ProviderId => "local";
+    public string ModelId => "hash-md5";
+    public int Dimensions => _dims;
 
     public Vector Embed(string text, int dimensions = 0)
     {
@@ -41,6 +41,11 @@ public sealed class EmbeddingService : IEmbeddingService
         if (norm > 0)
             for (int i = 0; i < d; i++) v[i] = (float)(v[i] / norm);
         return new Vector(v);
+    }
+
+    public Task<Vector> EmbedAsync(string text, CancellationToken ct = default)
+    {
+        return Task.FromResult(Embed(text));
     }
 
     private static IEnumerable<string> Tokenize(string text)

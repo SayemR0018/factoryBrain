@@ -16,6 +16,14 @@
 //   4. .env.local (DotNetEnv — overrides .env)
 //   5. OS environment variables
 //
+// RAG embedding providers (resolved at startup):
+//   RAG_EMBEDDING_PROVIDER = local | openai | gemini   (default: local)
+//   RAG_EMBEDDING_MODEL    = e.g. text-embedding-3-small
+//   RAG_EMBEDDING_API_KEY  = falls back to LLM_API_KEY
+//   RAG_EMBEDDING_DIMENSIONS = falls back to Rag:EmbeddingDimensions, then 384
+//   If LLM_PROVIDER is set and a key is present, that provider is mirrored
+//   (gemini → Gemini embeddings, openai → text-embedding-3-small).
+//
 // Health check:
 //   GET /health → 200 OK when PostgreSQL is reachable, otherwise 503.
 // ---------------------------------------------------------------------------
@@ -31,7 +39,6 @@ using FactoryBrain.Api.Services.Rag;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-// 1. Load .env + .env.local (idempotent — missing files are tolerated).
 Env.Load(".env");
 Env.Load(".env.local");
 
@@ -81,12 +88,37 @@ builder.Services.AddDbContext<FactoryBrainDbContext>(opts =>
 // ─── FluentValidation (assembly scan) ──────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// ─── DI for application services ──────────────────────────────────────────
-// Singleton: stateless / cache-friendly helpers (RAG embedder, chunker, scorer,
-// rag service itself is scoped so it can request DbContext per call).
-builder.Services.AddSingleton<IEmbeddingService, EmbeddingService>();
+// ─── RAG: pluggable embedder + chunker + scorer ────────────────────────────
+// The resolver is a singleton; the actual IEmbeddingService is built once at
+// startup (also a singleton) and is decorated with WithFallback so any
+// hosted-provider failure drops permanently to the local hash embedder with
+// a warning log — never a crash, never a key in the log.
+builder.Services.AddSingleton<EmbeddingProviderResolver>();
+builder.Services.AddSingleton<IEmbeddingService>(sp =>
+{
+    var resolver = sp.GetRequiredService<EmbeddingProviderResolver>();
+    var http     = sp.GetRequiredService<IHttpClientFactory>();
+    var lf       = sp.GetRequiredService<ILoggerFactory>();
+    // BuildService wraps the hosted (or stub) primary with the local hash
+    // fallback so transient hosted failures don't crash the request — they
+    // flip Degraded via the wrapper and degrade gracefully.
+    return resolver.BuildService(http, lf);
+});
 builder.Services.AddSingleton<TextChunker>();
 builder.Services.AddSingleton<HybridScorer>();
+
+// Background health probe + automatic reindex on recovery. The monitor
+// re-reads env vars on every cycle so newly-set RAG_EMBEDDING_* values
+// take effect without a restart.
+builder.Services.AddSingleton<RagHealthMonitor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RagHealthMonitor>());
+
+// Scoped helpers for column-dim probing + metadata-aware reindex.
+// EmbeddingColumnAdmin needs IHttpClientFactory + ILoggerFactory so it can
+// build a fresh primary hosted embedder directly (no fallback wrapper)
+// during the reindex path — that's how we surface hosted-call failures
+// as exceptions that trigger a transactional rollback + Degraded flag.
+builder.Services.AddScoped<EmbeddingColumnAdmin>();
 
 // Scoped: each request gets a fresh instance with its own DbContext.
 builder.Services.AddScoped<IRagService,        RagService>();
@@ -100,7 +132,7 @@ builder.Services.AddScoped<IAgentRunService,   AgentRunService>();
 builder.Services.AddScoped<ILlmSettingsService, LlmSettingsService>();
 builder.Services.AddScoped<IBriefService,      BriefService>();
 
-// HTTP client used by AskService / AgentRunService for OpenAI/Anthropic/Gemini.
+// HTTP client used by AskService / AgentRunService + hosted embedders.
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
@@ -141,9 +173,112 @@ var app = builder.Build();
 // ─── Automatic database initialization & seeding ───────────────────────────
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<FactoryBrainDbContext>();
-    db.Database.EnsureCreated();   // bring the schema up; EF migrations follow in production
+    var db    = scope.ServiceProvider.GetRequiredService<FactoryBrainDbContext>();
+    var rag   = scope.ServiceProvider.GetRequiredService<IRagService>();
+    var admin = scope.ServiceProvider.GetRequiredService<EmbeddingColumnAdmin>();
+    var log   = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var embed = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
+    var httpF = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+    var lf    = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+
+    // Ensure the pgvector extension is present before EF tries to use it.
     db.Database.ExecuteSqlRaw("CREATE EXTENSION IF NOT EXISTS vector;");
+
+    // Surface the configured-vs-active shape so operators see degraded
+    // mode (and which provider was requested) without hitting /api/rag/status.
+    var resolver = scope.ServiceProvider.GetRequiredService<EmbeddingProviderResolver>();
+
+    // Dev-only test switches: ignored (with one warning) when not in
+    // Development. Always read after the warning so an env flip right
+    // before a probe can still take effect.
+    if (!builder.Environment.IsDevelopment())
+    {
+        var swRaw = System.Environment.GetEnvironmentVariable(EmbeddingProviderResolver.EnvFakeFail)
+                    ?? System.Environment.GetEnvironmentVariable(EmbeddingProviderResolver.EnvFakeFailAfter);
+        if (!string.IsNullOrWhiteSpace(swRaw))
+        {
+            log.LogWarning(
+                "RAG_EMBEDDING_FAKE_FAIL* ignored outside Development (ASPNETCORE_ENVIRONMENT={Env}).",
+                builder.Environment.EnvironmentName);
+        }
+    }
+
+    // Pre-flight: make one probe embedding call against the active hosted
+    // provider (when configured != local). Any failure — HTTP error, auth,
+    // timeout, wrong-dim response, simulated failure — flips the resolver
+    // into Degraded and makes Active = local. The RagHealthMonitor will
+    // probe again on its own interval and recover when the provider is
+    // available.
+    try
+    {
+        await resolver.ProbeAsync(httpF, lf, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        log.LogWarning(ex, "RAG embedding probe threw unexpectedly.");
+    }
+
+    var r1 = resolver.Resolve();
+    if (r1.Degraded || resolver.IsDegraded)
+    {
+        // Spec: degraded startup warning prints ONLY configuredProvider,
+        // activeProvider=local, configuredDims, apiKey=set|missing.
+        log.LogWarning(
+            "RAG embedding startup degraded mode: configuredProvider={ConfiguredProvider} activeProvider=local configuredDims={ConfiguredDims} apiKey={ApiKey}.",
+            r1.Configured.Provider,
+            r1.Configured.Dims,
+            r1.Configured.KeySet ? "set" : "missing");
+    }
+    else
+    {
+        log.LogInformation(
+            "RAG embedding startup: configuredProvider={ConfiguredProvider} activeProvider={ActiveProvider} model={Model} dims={Dims}",
+            r1.Configured.Provider, r1.Active.Provider, r1.Active.Model, r1.Active.Dims);
+    }
+
+    // (a) If the app tables exist (legacy EnsureCreated bootstrap) but the
+    //     __ef_migrations history table is missing or empty, create it and
+    //     stamp the InitialBaseline migration as already applied so EF
+    //     doesn't try to recreate existing schema and lose data. Newer
+    //     migrations still run normally via Database.Migrate() below.
+    BootstrapMigrationBaseline(db, log);
+
+    // (b) Apply EF Core migrations. The two migrations are:
+    //       20260927222103_InitialBaseline    — pre-45 schema + vector extension
+    //       20260927222258_AddEmbeddingMetadata — adds EmbeddingProvider / Model / Dims
+    var pending = db.Database.GetPendingMigrations();
+    if (pending.Any())
+    {
+        log.LogInformation("Applying {N} pending EF migration(s): {Names}",
+            pending.Count(), string.Join(", ", pending));
+        db.Database.Migrate();
+    }
+
+    // (c) + (d) Atomic resize + reindex. Embeddings are pre-computed
+    //          outside the DB transaction; the DB write (ALTER + per-row
+    //          update + commit) is then done in one transaction inside
+    //          the EF execution strategy. A mid-batch embedding failure
+    //          returns 409; a mid-transaction DB error logs + surfaces
+    //          as 500 and rolls the whole thing back.
+    if (!resolver.IsDegraded)
+    {
+        try
+        {
+            var outcome = await admin.ResizeAndReindexAsync(CancellationToken.None);
+            if (outcome.Documents > 0)
+            {
+                log.LogInformation(
+                    "Startup reindex: updated {Docs} docs / {Chunks} chunks to provider={Provider} model={Model} dims={Dims}.",
+                    outcome.Documents, outcome.Chunks, outcome.Configured.Provider, outcome.Configured.Model, outcome.Configured.Dims);
+            }
+        }
+        catch (EmbeddingProviderUnavailableException ex)
+        {
+            log.LogError(ex,
+                "Startup reindex rolled back: embedding provider became unavailable mid-batch. Configure a working API key or set RAG_EMBEDDING_PROVIDER=local to recover.");
+        }
+    }
+
     await DbInitializer.Initialize(scope.ServiceProvider);
 }
 
@@ -174,6 +309,8 @@ app.MapGet("/", () => Results.Ok(new
     endpoints = new[]
     {
         "POST /api/ask",
+        "POST /api/rag/reindex",
+        "GET  /api/rag/status",
         "GET  /api/brief/morning",
         "GET  /api/floor-alerts",
         "PATCH /api/floor-alerts/{id}",
@@ -199,4 +336,85 @@ app.Urls.Add("https://localhost:5001");
 
 app.Run();
 
-public partial class Program { } // for WebApplicationFactory in tests
+// ─── Helpers ────────────────────────────────────────────────────────────────
+public partial class Program
+{
+    /// <summary>
+    /// (a) If the app tables exist (legacy <c>EnsureCreated()</c> bootstrap)
+    /// but the <c>__ef_migrations</c> history table is missing or empty,
+    /// create the history table if needed and stamp the
+    /// <c>InitialBaseline</c> migration as already applied so EF doesn't try
+    /// to recreate existing schema and lose data. Newer migrations still
+    /// run normally via <c>Database.Migrate()</c> on the next line.
+    /// </summary>
+    private static void BootstrapMigrationBaseline(
+        Microsoft.EntityFrameworkCore.DbContext db,
+        ILogger log)
+    {
+        try
+        {
+            var conn = db.Database.GetDbConnection();
+            conn.Open();
+            try
+            {
+                // 1. History table — create it now if it doesn't exist yet.
+                long historyExists;
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE tablename = '__ef_migrations';";
+                    historyExists = Convert.ToInt64(cmd.ExecuteScalar() ?? 0L);
+                }
+                if (historyExists == 0)
+                {
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            CREATE TABLE ""__ef_migrations"" (
+                                ""MigrationId""    VARCHAR(150) NOT NULL,
+                                ""ProductVersion"" VARCHAR(32)  NOT NULL,
+                                PRIMARY KEY (""MigrationId"")
+                            );";
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+
+                // 2. Probe app tables: did EnsureCreated already create them?
+                long tablesPresent;
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE tablename IN ('manual_documents', 'document_chunks');";
+                    tablesPresent = Convert.ToInt64(cmd.ExecuteScalar() ?? 0L);
+                }
+
+                // 3. If the app tables are present, check history emptiness.
+                long appliedCount;
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM \"__ef_migrations\";";
+                    appliedCount = Convert.ToInt64(cmd.ExecuteScalar() ?? 0L);
+                }
+                if (tablesPresent > 0 && appliedCount == 0)
+                {
+                    db.Database.ExecuteSqlRaw(
+                        "INSERT INTO \"__ef_migrations\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
+                        "20260927222103_InitialBaseline", "9.0.0");
+                    log.LogInformation(
+                        "Adopted InitialBaseline migration for an EnsureCreated-bootstrapped database; newer migrations will still run.");
+                }
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Don't crash startup if the probe fails — the next call to
+            // GetPendingMigrations() / Migrate() will surface the real error.
+            log.LogWarning(ex, "BootstrapMigrationBaseline probe failed; continuing startup.");
+        }
+    }
+}
+

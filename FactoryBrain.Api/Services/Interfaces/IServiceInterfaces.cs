@@ -9,6 +9,7 @@ using FactoryBrain.Api.Dtos.Qc;
 using FactoryBrain.Api.Dtos.Sensors;
 using FactoryBrain.Api.Dtos.Settings;
 using FactoryBrain.Api.Dtos.Vision;
+using FactoryBrain.Api.Services.Rag;
 
 namespace FactoryBrain.Api.Services.Interfaces;
 
@@ -80,7 +81,16 @@ public interface IRagService
         string query, RagFilter? filter, int topK = 4, double similarityThreshold = 0,
         double bm25Weight = 0.35, CancellationToken ct = default);
 
-    Task ReindexAsync(CancellationToken ct = default);
+    /// <summary>Re-embed every chunk with the currently active embedder.</summary>
+    Task<ReindexReport> ReindexAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// True when the embedder metadata stored on existing manual rows
+    /// (provider / model / dims) does not match the active configuration —
+    /// i.e. a reindex is required to keep vectors consistent with the
+    /// configured <see cref="FactoryBrain.Api.Services.Rag.IEmbeddingService"/>.
+    /// </summary>
+    Task<bool> NeedsReindexAsync(CancellationToken ct = default);
 }
 
 public sealed record SensorSimState(

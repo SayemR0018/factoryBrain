@@ -314,3 +314,12 @@ previous step's tests stay green.
 Each step keeps `scripts/test-rag.mjs` green and leaves `EnsureCreated` as
 the dev fallback until a future step introduces real migrations (covered in
 section 5 above).
+
+---
+
+## Known limitations
+
+- In degraded mode (`/api/rag/status` reports `degraded=true` because the
+  configured hosted provider is missing its API key or its embedding call
+  fails), `/api/ask` returns `denseScore = 0` for every hit and the results
+  are BM25-only ranking.

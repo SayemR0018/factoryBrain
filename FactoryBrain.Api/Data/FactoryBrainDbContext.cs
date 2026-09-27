@@ -1,4 +1,5 @@
 using FactoryBrain.Api.Domain.Entities;
+using FactoryBrain.Api.Services.Rag;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 
@@ -10,7 +11,14 @@ namespace FactoryBrain.Api.Data;
 /// </summary>
 public class FactoryBrainDbContext : DbContext
 {
-    public FactoryBrainDbContext(DbContextOptions<FactoryBrainDbContext> opts) : base(opts) { }
+    private readonly EmbeddingProviderResolver? _resolver;
+
+    public FactoryBrainDbContext(
+        DbContextOptions<FactoryBrainDbContext> opts,
+        EmbeddingProviderResolver? resolver = null) : base(opts)
+    {
+        _resolver = resolver;
+    }
 
     public DbSet<FloorAlert>        FloorAlerts        => Set<FloorAlert>();
     public DbSet<LineBoardMetric>   LineBoardMetrics   => Set<LineBoardMetric>();
@@ -35,5 +43,13 @@ public class FactoryBrainDbContext : DbContext
         base.OnModelCreating(mb);
         mb.HasPostgresExtension("vector");
         mb.ApplyConfigurationsFromAssembly(typeof(FactoryBrainDbContext).Assembly);
+
+        // The pgvector column on document_chunks is intentionally mapped as
+        // "vector" with no fixed dimension. The dimension lives in the
+        // database and is mutated at runtime by StartupColumnDims / Reindex;
+        // EF never tries to alter it back to a baked-in width. See
+        // DocumentChunkConfiguration for the full rationale.
+        void _SuppressUnusedWarning() => _ = _resolver; // resolver kept for future extensions
+        _SuppressUnusedWarning();
     }
 }

@@ -57,6 +57,17 @@ public sealed class AdminTokenAuthorizationFilter : IAsyncAuthorizationFilter
         if (_env.IsDevelopment())
             return Task.CompletedTask;
 
+        // If the request carries a valid bearer JWT with role Admin, the
+        // modern AdminOrLegacyToken policy will pass on its own. We must
+        // NOT also require X-Admin-Token — that would defeat the JWT path.
+        // A non-Admin JWT (Viewer, etc.) is left alone: the policy will
+        // 403 it, which is the spec-correct outcome.
+        if (ctx.HttpContext.User?.Identity?.IsAuthenticated == true
+            && ctx.HttpContext.User.IsInRole("Admin"))
+        {
+            return Task.CompletedTask;
+        }
+
         StampNoStore(ctx);
 
         var configured = (Environment.GetEnvironmentVariable(EnvVarName)

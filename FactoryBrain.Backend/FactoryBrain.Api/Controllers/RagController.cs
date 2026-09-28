@@ -3,6 +3,7 @@ using FactoryBrain.Application.Dtos.Rag;
 using FactoryBrain.Api.Middleware;
 using FactoryBrain.Application.Abstractions.Interfaces;
 using FactoryBrain.Infrastructure.Rag;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -81,6 +82,7 @@ public class RagController : ControllerBase
     /// </summary>
     [HttpPost("reindex")]
     [AdminToken]
+    [Authorize(Policy = AuthPolicies.AdminOrLegacyToken)]
     public async Task<IActionResult> Reindex(CancellationToken ct)
     {
         _log.LogInformation("Manual reindex requested via /api/rag/reindex");
@@ -170,6 +172,7 @@ public class RagController : ControllerBase
     /// </summary>
     [HttpPost("ingest")]
     [AdminToken]
+    [Authorize(Policy = AuthPolicies.AdminOrLegacyToken)]
     public async Task<IActionResult> Ingest([FromBody] RagIngestRequest body, CancellationToken ct)
     {
         // Step 51: body validation runs in the global FluentValidationFilter

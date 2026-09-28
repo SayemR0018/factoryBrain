@@ -4,6 +4,7 @@ using FactoryBrain.Application.Abstractions.Interfaces;
 using FactoryBrain.Infrastructure.Rag;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FactoryBrain.Infrastructure.Persistence;
 
@@ -29,6 +30,8 @@ public static class DbInitializer
         var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
         var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
         var admin = scope.ServiceProvider.GetRequiredService<EmbeddingColumnAdmin>();
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var log = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
 
         await SeedAgentsAsync(db, ct);
         await SeedPoliciesAsync(db, ct);
@@ -39,6 +42,8 @@ public static class DbInitializer
         await SeedQcDefectsAsync(db, ct);
         await SeedFloorAlertsAsync(db, ct);
         await SeedOrdersAndInventoryAsync(db, ct);
+        await SeedAdminUserAsync(db, hasher, log, ct);
+        await SeedViewerUserAsync(db, hasher, log, ct);
     }
 
     // --- agents -----------------------------------------------------------
@@ -893,6 +898,85 @@ public static class DbInitializer
             });
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    // --- admin user (idempotent, env-gated) ------------------------------
+    /// <summary>
+    /// If both <c>SEED_ADMIN_EMAIL</c> and <c>SEED_ADMIN_PASSWORD</c> are
+    /// set, create an <see cref="User"/> with <c>Role = "Admin"</c> and a
+    /// freshly-hashed password — unless a user with that email already
+    /// exists (so the bootstrap is safe to run on every restart). The
+    /// password is hashed via <see cref="IPasswordHasher"/>; the raw
+    /// value never appears in logs, error messages, or DB columns.
+    /// </summary>
+    private static async Task SeedAdminUserAsync(
+        FactoryBrainDbContext db,
+        IPasswordHasher hasher,
+        ILogger log,
+        CancellationToken ct)
+    {
+        var email    = (Environment.GetEnvironmentVariable("SEED_ADMIN_EMAIL")    ?? string.Empty).Trim();
+        var password = (Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD") ?? string.Empty);
+        if (email.Length == 0 || password.Length == 0) return; // skip silently
+
+        var normalised = email.ToLowerInvariant();
+        var existing = await db.Users.AnyAsync(u => u.Email == normalised, ct);
+        if (existing) return;
+
+        // Hash against a transient User instance; the hasher only reads
+        // the User reference as a salt-pinning hint and the instance is
+        // discarded after the call.
+        var hashSeed = new User { Email = normalised };
+        var hash = hasher.Hash(hashSeed, password);
+        db.Users.Add(new User
+        {
+            Id            = Guid.NewGuid(),
+            Email         = normalised,
+            PasswordHash  = hash,
+            Role          = "Admin",
+            CreatedAt     = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(ct);
+        // Note: never log the password — only the email + the fact we
+        // created the row.
+        log.LogInformation("Seeded admin user {Email} from SEED_ADMIN_EMAIL.", normalised);
+    }
+
+    // --- viewer user (idempotent, env-gated) -----------------------------
+    /// <summary>
+    /// Same shape as <see cref="SeedAdminUserAsync"/> but for the Viewer
+    /// role. Reads <c>SEED_VIEWER_EMAIL</c> + <c>SEED_VIEWER_PASSWORD</c>;
+    /// if either is unset the seeder is a no-op. Used by the batch-52
+    /// verification matrix to exercise the AdminOrLegacyToken policy
+    /// against a non-Admin JWT (which the spec mandates returns 403
+    /// problem details instead of the AdminToken envelope).
+    /// </summary>
+    private static async Task SeedViewerUserAsync(
+        FactoryBrainDbContext db,
+        IPasswordHasher hasher,
+        ILogger log,
+        CancellationToken ct)
+    {
+        var email    = (Environment.GetEnvironmentVariable("SEED_VIEWER_EMAIL")    ?? string.Empty).Trim();
+        var password = (Environment.GetEnvironmentVariable("SEED_VIEWER_PASSWORD") ?? string.Empty);
+        if (email.Length == 0 || password.Length == 0) return; // skip silently
+
+        var normalised = email.ToLowerInvariant();
+        var existing = await db.Users.AnyAsync(u => u.Email == normalised, ct);
+        if (existing) return;
+
+        var hashSeed = new User { Email = normalised };
+        var hash = hasher.Hash(hashSeed, password);
+        db.Users.Add(new User
+        {
+            Id            = Guid.NewGuid(),
+            Email         = normalised,
+            PasswordHash  = hash,
+            Role          = "Viewer",
+            CreatedAt     = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(ct);
+        log.LogInformation("Seeded viewer user {Email} from SEED_VIEWER_EMAIL.", normalised);
     }
 
     // --- helpers ----------------------------------------------------------

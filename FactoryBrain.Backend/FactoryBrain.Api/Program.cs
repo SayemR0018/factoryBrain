@@ -36,7 +36,16 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text;
+using System.Net;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
 using DotNetEnv;
 using FactoryBrain.Infrastructure.Persistence;
 using FactoryBrain.Api.Middleware;
@@ -214,6 +223,210 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o =>
 // mixed case, double slash, percent-encoded slash) either match the route
 // or they don't — the filter never gets a chance to mis-handle them.
 builder.Services.AddScoped<AdminTokenAuthorizationFilter>();
+
+// ─── JWT signing key resolution ────────────────────────────────────────────
+// Bind JwtOptions from configuration first (Issuer/Audience come from
+// appsettings.json), then overlay the runtime signing key from the
+// JWT_SIGNING_KEY env var (preferred over the Jwt__SigningKey config
+// value). Production: the env var is REQUIRED and must produce ≥ 32 UTF-8
+// bytes — startup throws otherwise. Development: a missing key falls
+// back to a per-process random 32-byte key (NEVER logged) so a fresh
+// checkout boots without ceremony.
+var jwtSection = builder.Configuration.GetSection("Jwt");
+builder.Services.Configure<JwtOptions>(jwtSection);
+var jwtOpts = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+
+var envKey = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY");
+var envKeyBytes = string.IsNullOrEmpty(envKey) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(envKey);
+if (envKeyBytes.Length >= 32)
+{
+    jwtOpts.SigningKeyBytes = envKeyBytes;
+}
+else if (builder.Environment.IsDevelopment())
+{
+    // Generate a per-process random 32-byte key. Log only the LENGTH so
+    // the key itself never leaks via diagnostic output.
+    var generated = RandomNumberGenerator.GetBytes(32);
+    jwtOpts.SigningKeyBytes = generated;
+    Console.WriteLine(
+        "[startup] JWT_SIGNING_KEY missing/short in Development — generated random 32-byte key (length=32). Tokens will not survive a restart.");
+}
+else
+{
+    throw new InvalidOperationException(
+        "JWT_SIGNING_KEY is missing or shorter than 32 UTF-8 bytes. " +
+        "Production requires a signing key of at least 32 bytes; " +
+        "set JWT_SIGNING_KEY in the environment before starting the service.");
+}
+
+// Re-bind the (possibly overridden) options so the registered IOptions<JwtOptions>
+// carries the resolved bytes into TokenService at runtime.
+builder.Services.PostConfigure<JwtOptions>(o => { o.SigningKeyBytes = jwtOpts.SigningKeyBytes; });
+
+// ─── Authentication (JWT bearer) ───────────────────────────────────────────
+// The bearer scheme is what /api/auth/me and the AdminOrLegacyToken
+// policy's role check rely on. Issuer / Audience / SigningKey come from
+// the resolved JwtOptions above.
+var jwtIssuer   = jwtOpts.Issuer   ?? "factorybrain";
+var jwtAudience = jwtOpts.Audience ?? "factorybrain";
+var jwtKey      = new SymmetricSecurityKey(jwtOpts.SigningKeyBytes);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =>
+    {
+        o.MapInboundClaims = false; // keep "sub" / "email" claim names verbatim
+        o.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidIssuer              = jwtIssuer,
+            ValidateAudience         = true,
+            ValidAudience            = jwtAudience,
+            ValidateLifetime         = true,
+            ClockSkew                = TimeSpan.FromSeconds(jwtOpts.ClockSkewSeconds),
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey         = jwtKey,
+            NameClaimType            = JwtRegisteredClaimNames.Email,
+            RoleClaimType            = System.Security.Claims.ClaimTypes.Role,
+        };
+    });
+
+// ─── Authorization policies ───────────────────────────────────────────────
+// AdminOrLegacyToken succeeds when:
+//   (1) the caller has role Admin on a valid JWT (the modern path), OR
+//   (2) the legacy X-Admin-Token check passes via AdminTokenVerifier, OR
+//   (3) the request is anonymous AND the process is in Development
+//       (so the [AdminToken] filter can short-circuit with its
+//       IsDevelopment bypass).
+//
+// For an anonymous request in non-Development the policy *fails open*.
+// This is intentional: we want the [AdminToken] filter (an
+// IAsyncAuthorizationFilter) to get a chance to emit its canonical
+// {error: "AdminTokenMissing"} envelope in Production — if the policy
+// returned false instead, the framework's JwtBearer challenge would
+// win the race and return its default 401 problem details instead.
+//
+// TODO(54c): remove the legacy X-Admin-Token path. The JWT role branch
+// is now the canonical way to authorise admin actions; the legacy
+// ADMIN_API_TOKEN is kept only as a fallback so a fresh deploy with no
+// seeded users still boots. Batch 54c deletes AdminTokenVerifier and the
+// AdminTokenAuthorizationFilter envelope and switches every [AdminToken]
+// action to [Authorize(Policy = AdminOrLegacyToken)] alone.
+builder.Services.AddSingleton<AdminTokenVerifier>();
+builder.Services.AddAuthorization(o =>
+{
+    o.AddPolicy(AuthPolicies.AdminOrLegacyToken, p =>
+        p.RequireAssertion(ctx =>
+        {
+            // Path (1): role Admin on a valid JWT.
+            if (ctx.User.Identity?.IsAuthenticated == true && ctx.User.IsInRole("Admin"))
+                return true;
+
+            // Path (2): legacy X-Admin-Token matches the env var.
+            if (ctx.Resource is HttpContext http)
+            {
+                var verifier = http.RequestServices.GetService(typeof(AdminTokenVerifier)) as AdminTokenVerifier;
+                if (verifier is not null)
+                {
+                    var outcome = verifier.Verify(http);
+                    if (outcome == AdminTokenVerifier.Outcome.Pass
+                        || outcome == AdminTokenVerifier.Outcome.PassDevelopment)
+                        return true;
+                }
+            }
+
+            // Path (3): anonymous request — let the [AdminToken] filter
+            // decide. In Development it short-circuits; in non-Development
+            // it returns the canonical {error: "AdminTokenMissing"}
+            // envelope. A *present-but-not-Admin* JWT skips this branch
+            // (IsAuthenticated == true) and falls through to "false" →
+            // framework 403 problem details, which is what the spec wants.
+            //
+            // 54c note: this anonymous fallthrough exists ONLY because
+            // [AdminToken] still does the legacy token check. In batch
+            // 54c the fallthrough and every [AdminToken] attribute must
+            // be removed TOGETHER — never one without the other. If you
+            // drop the fallthrough first, anonymous callers start
+            // getting framework 401 problem details instead of the
+            // AdminTokenMissing envelope; if you drop [AdminToken]
+            // first, anonymous callers get 403 problem details instead
+            // of AdminTokenMissing. Removing them in the same commit
+            // keeps the response shape stable.
+            if (ctx.User.Identity?.IsAuthenticated != true)
+                return true;
+
+            return false;
+        }));
+});
+
+// ─── Login rate limit (fixed window, 5/min/IP, login route only) ──────────
+// Named "login" — AuthController.Login decorates the action with
+// [EnableRateLimiting("login")] so every other route is unrestricted.
+// UseForwardedHeaders below resolves the real client IP behind a reverse
+// proxy before the limiter partitions on it.
+builder.Services.AddRateLimiter(o =>
+{
+    // PartitionedRateLimiter.Create<HttpContext, string> is required for
+    // per-IP buckets. AddFixedWindowLimiter alone creates a single shared
+    // bucket — useless for credential-stuffing protection. The partition
+    // key reads RemoteIpAddress AFTER UseForwardedHeaders rewrites it,
+    // so when FORWARDED_HEADERS_ENABLED=true and the request comes from a
+    // trusted proxy, each forwarded client gets its own 5/min budget.
+    o.AddPolicy("login", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit       = 5,
+                Window            = TimeSpan.FromMinutes(1),
+                QueueLimit        = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    // 429 response shape: RFC 7807 ProblemDetails + Retry-After. Matches
+    // the rest of the API's error envelope.
+    o.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        var retryAfterSeconds = 60; // one full window
+        ctx.HttpContext.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
+        ctx.HttpContext.Response.Headers["Cache-Control"] = "no-store";
+        ctx.HttpContext.Response.ContentType = "application/problem+json";
+        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Type   = "https://datatracker.ietf.org/doc/html/rfc6585#section-4",
+            Title  = "Too Many Requests",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Too many login attempts from this client. Retry after 60 seconds.",
+            Instance = ctx.HttpContext.Request.Path.HasValue
+                ? ctx.HttpContext.Request.Path.Value! : string.Empty,
+        };
+        await ctx.HttpContext.Response.WriteAsJsonAsync(problem, ct);
+    };
+});
+
+// ─── AUTH_COOKIE_SAMESITE validation (fail-fast on bad values) ────────────
+// AuthController reads the same env var on every cookie stamp/clear, but
+// a bad value would only blow up at request time. Catch it here at
+// startup so an operator typo is caught immediately.
+var cookieSameSiteRaw = Environment.GetEnvironmentVariable("AUTH_COOKIE_SAMESITE");
+try
+{
+    _ = AuthCookieSettings.ParseSameSite(cookieSameSiteRaw);
+}
+catch (InvalidOperationException ex)
+{
+    throw new InvalidOperationException(
+        $"AUTH_COOKIE_SAMESITE={cookieSameSiteRaw ?? "<unset>"} — {ex.Message}",
+        ex);
+}
+
+// ─── Auth DI ──────────────────────────────────────────────────────────────
+// Stateless token service is a singleton; the auth service + hasher are
+// scoped because they ride the request DbContext.
+builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasherAdapter>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 // ─── RAG tuning config (Rag: section in appsettings.json, env Rag__*) ──────
 builder.Services.Configure<RagConfig>(builder.Configuration.GetSection("Rag"));
@@ -446,6 +659,65 @@ app.UseStatusCodePages();
 // middleware short-circuits (e.g. on a 401/403).
 app.UseMiddleware<NoStoreMiddleware>();
 
+// UseForwardedHeaders runs BEFORE UseRouting / UseRateLimiter /
+// UseAuthentication so the rate limiter partitions on the real client
+// IP and any future IP-aware middleware sees the same value. Only
+// active when FORWARDED_HEADERS_ENABLED=true (default off) so a direct
+// exposure (no proxy in front) cannot be tricked by an inbound
+// X-Forwarded-For header.
+var fwdEnabled = string.Equals(
+    Environment.GetEnvironmentVariable("FORWARDED_HEADERS_ENABLED"),
+    "true", StringComparison.OrdinalIgnoreCase);
+if (fwdEnabled)
+{
+    var fwdOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+        ForwardLimit     = 1,
+    };
+    // Start clean — we only honour proxies the operator named in
+    // TRUSTED_PROXIES, otherwise ASP.NET Core's defaults (the loop-back
+    // subnets) leak trusted status beyond what's intended. The
+    // collections are read-only properties so we mutate them in place.
+    fwdOptions.KnownProxies.Clear();
+    fwdOptions.KnownNetworks.Clear();
+
+    var rawProxies = Environment.GetEnvironmentVariable("TRUSTED_PROXIES");
+    var proxyEntries = string.IsNullOrWhiteSpace(rawProxies)
+        ? Array.Empty<string>()
+        : rawProxies.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    if (proxyEntries.Length == 0)
+    {
+        Console.WriteLine(
+            "[startup] FORWARDED_HEADERS_ENABLED=true with TRUSTED_PROXIES empty: " +
+            "X-Forwarded-For is trusted from any sender. Anyone who can reach " +
+            "the API directly can spoof their client IP and bypass the login " +
+            "rate limit. Only do this when the API is reachable exclusively " +
+            "through the proxy; otherwise set TRUSTED_PROXIES.");
+    }
+    else
+    {
+        foreach (var entry in proxyEntries)
+        {
+            if (IPAddress.TryParse(entry, out var ip))
+            {
+                fwdOptions.KnownProxies.Add(ip);
+                continue;
+            }
+            if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(entry, out var net))
+            {
+                fwdOptions.KnownNetworks.Add(net);
+                continue;
+            }
+            throw new InvalidOperationException(
+                $"TRUSTED_PROXIES entry '{entry}' is not a valid IPv4/IPv6 address or CIDR.");
+        }
+    }
+
+    app.UseForwardedHeaders(fwdOptions);
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -454,6 +726,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 app.UseCors(CorsPolicyName);                       // CORS for the configured allowlist
+app.UseRateLimiter();                              // 5/min/IP on POST /api/auth/login
 app.UseAuthentication();
 app.UseAuthorization();
 

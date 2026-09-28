@@ -1,6 +1,7 @@
 using FactoryBrain.Application.Dtos.Settings;
 using FactoryBrain.Api.Middleware;
 using FactoryBrain.Application.Abstractions.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FactoryBrain.Api.Controllers;
@@ -46,6 +47,7 @@ public class SettingsController : ControllerBase
 
     [HttpPost("llm")]
     [AdminToken]
+    [Authorize(Policy = AuthPolicies.AdminOrLegacyToken)]
     public IActionResult Post([FromBody] LlmSettingsRequest body)
     {
         StampNoStore();

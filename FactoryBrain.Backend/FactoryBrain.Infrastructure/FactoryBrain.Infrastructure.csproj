@@ -45,6 +45,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
 
+    <!-- Auth (batch 52): PasswordHasher<User> lives in
+         Microsoft.AspNetCore.Identity; JwtSecurityTokenHandler lives
+         in System.IdentityModel.Tokens.Jwt; both come transitively
+         from JwtBearer in the Api project — Infrastructure is a class
+         library so we have to declare them explicitly. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+
     <!-- Config / env -->
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
 

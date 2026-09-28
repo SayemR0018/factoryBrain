@@ -342,6 +342,94 @@ itself would 401.
 
 ---
 
+## 7. Authentication & Authorization
+
+The .NET API adds real user accounts at step 52. The four new endpoints
+sit alongside the existing admin gates — the legacy `X-Admin-Token`
+header still works so a fresh deploy with no users still boots.
+
+### 7.1 Endpoints
+
+| Method | Route                | Body / inputs                | Result |
+| ------ | -------------------- | ---------------------------- | ------ |
+| POST   | `/api/auth/login`    | `{ email, password }`        | 200 `{ accessToken, expiresIn, user }` + `Set-Cookie: fb_refresh=…`. Same canonical 401 (`Invalid email or password.`) for unknown email and wrong password. Rate-limited 5/min/IP. |
+| POST   | `/api/auth/refresh`  | reads `fb_refresh` cookie    | 200 `{ accessToken, expiresIn, user }` + rotated `fb_refresh` cookie. 401 + clears cookie on missing / tampered / expired. |
+| POST   | `/api/auth/logout`   | reads `fb_refresh` cookie    | 204 + clears cookie. Always 204 (no-op if cookie is unknown). |
+| GET    | `/api/auth/me`       | bearer access token          | 200 `{ id, email, role }`. Framework 401 on missing / tampered / expired. |
+
+### 7.2 Tokens & cookie
+
+- **Access token** — JWT HS256, 15-minute lifetime, claims `sub` (user
+  id), `email`, `role`, `jti`. Returned in the JSON body only (never as a
+  cookie). Validated by the framework's JWT bearer scheme with 30 s
+  clock skew, issuer/audience both `factorybrain`.
+- **Refresh token** — 32 random bytes (base64url). The cookie value is
+  the raw token; the row stores `SHA-256(raw)` only — a DB leak cannot
+  replay a session. Lifetime 7 days. Rotated on every successful
+  refresh, so an intercepted cookie is invalidated the moment the
+  legitimate caller rotates it.
+- **`fb_refresh` cookie** — `HttpOnly`, `Path=/api/auth`, `SameSite=Lax`
+  by default (override via `AUTH_COOKIE_SAMESITE=Strict|None`; `None`
+  forces `Secure=true`). `Secure=true` outside Development.
+
+### 7.3 Admin authorization policy
+
+The three write actions — `POST /api/settings/llm`, `POST /api/rag/reindex`,
+`POST /api/rag/ingest` — are gated by **both** `[AdminToken]` (legacy
+`X-Admin-Token` header) and `[Authorize(Policy = AdminOrLegacyToken)]`
+(new JWT path). The policy succeeds when:
+
+1. The bearer token's role claim is `Admin`, OR
+2. The legacy `X-Admin-Token` header matches `ADMIN_API_TOKEN`
+   (constant-time compare), OR
+3. The process is in Development (the `[AdminToken]` filter short-
+   circuits and the policy delegates the same way).
+
+A Viewer-role JWT fails the policy with the framework's 403 problem
+details. A missing / tampered JWT + no legacy header returns the
+legacy `{error: "AdminTokenMissing"}` envelope.
+
+**TODO(54c):** drop the legacy `X-Admin-Token` path entirely and make
+JWT role Admin the only path.
+
+### 7.4 Login rate limit
+
+`POST /api/auth/login` is the only action rate-limited: fixed window,
+5 requests / minute / client IP. The 6th request gets a 429
+`application/problem+json` envelope with a `Retry-After: 60` header.
+`UseForwardedHeaders` runs before the limiter so a properly-configured
+proxy (`FORWARDED_HEADERS_ENABLED=true` + `TRUSTED_PROXIES=…`)
+partitions on the real client IP; a spoofed header from an untrusted
+IP is ignored.
+
+### 7.5 Forwarded headers (proxy support)
+
+Set `FORWARDED_HEADERS_ENABLED=true` ONLY when the API sits behind a
+reverse proxy. `TRUSTED_PROXIES` is a comma-separated list of IPs
+and/or CIDRs (e.g. `10.0.0.0/8,192.168.1.1`) — an empty list logs a
+startup warning and trusts `X-Forwarded-For` from ANY sender, which
+means anyone who can reach the API directly can spoof their client IP
+and bypass the login rate limit. Only leave the list empty when the
+API is reachable exclusively through the proxy; bad entries fail
+startup with the entry name in the message.
+
+### 7.6 Environment variables (names only — no values)
+
+| Name                       | Where it's read                       | Purpose |
+| -------------------------- | ------------------------------------- | ------- |
+| `JWT_SIGNING_KEY`          | `Program.cs`                          | HS256 secret (≥ 32 UTF-8 bytes). REQUIRED in Production; missing/short fails startup. In Development a random 32-byte key is generated (tokens don't survive a restart). |
+| `AUTH_COOKIE_SAMESITE`     | `AuthController`                      | `Lax` (default) / `Strict` / `None`. Bad values fail startup. `None` forces `Secure=true`. |
+| `SEED_ADMIN_EMAIL`         | `DbInitializer.SeedAdminUserAsync`    | Optional. Seeds an Admin user on first migration (only when no user with the same lowercased email exists). |
+| `SEED_ADMIN_PASSWORD`      | same                                  | Required alongside `SEED_ADMIN_EMAIL`; both unset = no-op. |
+| `FORWARDED_HEADERS_ENABLED`| `Program.cs`                          | `true` activates `UseForwardedHeaders`. Default off. |
+| `TRUSTED_PROXIES`          | `Program.cs`                          | Comma-separated IPs / CIDRs. Empty = log warning, trust `X-Forwarded-For` from any sender (safe only when the API is reachable exclusively through the proxy). Bad entries fail startup with the entry name in the message. |
+
+> The `users` table is created by the `20260928192118_AddUsers` EF
+> migration (step 52). After `Database.Migrate()` the `__ef_migrations`
+> history table has 5 rows.
+
+---
+
 *Pair with `JUDGES.md` for the live walkthrough, `README.md` for stack
 and run commands, and `src/services/*.server.ts` for the actual data
 contracts.*

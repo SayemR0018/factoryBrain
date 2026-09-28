@@ -37,6 +37,7 @@ public class FactoryBrainDbContext : DbContext
     public DbSet<SupplierRecord>    Suppliers          => Set<SupplierRecord>();
     public DbSet<InventoryRecord>   Inventory          => Set<InventoryRecord>();
     public DbSet<ActivityEvent>     ActivityEvents     => Set<ActivityEvent>();
+    public DbSet<User>               Users              => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {

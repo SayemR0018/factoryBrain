@@ -174,6 +174,7 @@ const GOLDEN = [
     query: "অগ্নি নিরাপত্তা চেকলিস্ট",
     kind: "bn",
     expected: ["demo-accord-fire-safety-checklist"],
+    mustHit: true,
   },
   {
     query: "লাইন দক্ষতা কমে গেলে কী করবো",
@@ -351,10 +352,22 @@ async function main() {
     row.conf = ragHits[0]?.hybridScore ?? null;
 
     if (!hit) {
-      row.reason = `expected one of ${fmtIds(q.expected)} in top-3, got ${fmtIds(top3)}`;
+      // mustHit rows are non-negotiable: any top-3 miss is a hard fail,
+      // not a soft WARN. Step 48e flag — defaults to false so existing
+      // rows keep the lenient aggregated-rate exit policy.
+      if (q.mustHit === true) {
+        row.hardFail = true;
+        row.reason = `mustHit: expected one of ${fmtIds(q.expected)} in top-3, got ${fmtIds(top3)}`;
+      } else {
+        row.reason = `expected one of ${fmtIds(q.expected)} in top-3, got ${fmtIds(top3)}`;
+      }
       results.push(row);
-      // WARN, not fail — soft miss; aggregated hit rate decides exit code.
-      console.log(`WARN miss: ${idx} ${q.query} got ${fmtIds(top3)}`);
+      if (row.hardFail) {
+        console.log(`[fail] ${idx} ${q.query}  → ${row.reason}`);
+      } else {
+        // WARN, not fail — soft miss; aggregated hit rate decides exit code.
+        console.log(`WARN miss: ${idx} ${q.query} got ${fmtIds(top3)}`);
+      }
       continue;
     }
 

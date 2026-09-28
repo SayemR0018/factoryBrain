@@ -126,8 +126,11 @@ public sealed class RagService : IRagService
         //     collapsed back to 1.0 (no double-counting)
         //
         // We intentionally do NOT chain synonym-of-synonym: the spec
-        // explicitly limits us to a single expansion. The output of
-        // RagSynonyms.ApplyToQuery is still logged so operators can see
+        // explicitly limits us to a single expansion. Multi-word synonyms
+        // (e.g. "standard minute value") are tokenised through the same
+        // HybridScorer pipeline used for chunks so the resulting tokens
+        // are FormKC + lowercased + Bangla-punctuation-aware. The output
+        // of RagSynonyms.ApplyToQuery is still logged so operators can see
         // what the legacy string-rewrite path produced — the new scorer
         // is independent of it and uses ExpandToken directly.
         var originalTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -137,9 +140,20 @@ public sealed class RagService : IRagService
 
         var synTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in originalTokens)
+        {
             foreach (var s in RagSynonyms.ExpandToken(t))
-                if (!string.IsNullOrEmpty(s) && !originalTokens.Contains(s))
-                    synTokens.Add(s);
+            {
+                if (string.IsNullOrEmpty(s)) continue;
+                // Multi-word synonym expansion — tokenise identically to
+                // chunk text so each token lands in synTokens separately.
+                foreach (var sub in HybridScorer.TokenizeForTest(s))
+                {
+                    if (string.IsNullOrEmpty(sub)) continue;
+                    if (originalTokens.Contains(sub)) continue; // originals win at 1.0
+                    synTokens.Add(sub);
+                }
+            }
+        }
 
         var expandedQueryForLog = originalTokens.Count > 0 || synTokens.Count > 0
             ? string.Join(' ', originalTokens.Concat(synTokens))
@@ -264,10 +278,11 @@ public sealed class RagService : IRagService
     /// about the two-tier synonym weights used in <see cref="RetrieveAsync"/>:
     /// original query tokens score at 1.0; one-level synonym expansions of
     /// those tokens score at <see cref="RagSynonyms.SynonymWeight"/>.
-    /// Tokens not in either set score at 1.0 if they match a literal query
-    /// term (defensive — the scorer only receives tokens we already
-    /// passed, so this branch is unreachable in practice).
-    /// Step 48d.
+    /// Tokens not in either set score at 0 — the scorer only feeds the
+    /// weighted term set, so anything outside the two buckets is invisible
+    /// to BM25 (no accidental string-match against an unrelated chunk).
+    /// Step 48d. <see cref="WeightedTerms"/> added in 48e so the scorer
+    /// can take the term set verbatim without re-tokenising the query.
     /// </summary>
     private sealed class RagTokenWeight : HybridScorer.ITokenWeight
     {
@@ -286,6 +301,21 @@ public sealed class RagService : IRagService
             if (_originals.Contains(token)) return 1.0;
             if (_synonyms.Contains(token))  return RagSynonyms.SynonymWeight;
             return 0;
+        }
+
+        public IEnumerable<(string Token, double Weight)> WeightedTerms()
+        {
+            // Originals first — a synonym that overlaps with an original
+            // is dropped by the scorer's Max() merge (or, equivalently,
+            // we skip it here). Emitting originals last would risk the
+            // synonym weight leaking through if the scorer ever forgot
+            // to collapse duplicates.
+            foreach (var t in _originals)
+                if (!string.IsNullOrEmpty(t))
+                    yield return (t, 1.0);
+            foreach (var t in _synonyms)
+                if (!string.IsNullOrEmpty(t) && !_originals.Contains(t))
+                    yield return (t, RagSynonyms.SynonymWeight);
         }
     }
 

@@ -121,6 +121,17 @@ public sealed class HybridScorer
         /// chunk. Return 0 to drop the token from the query set entirely
         /// (rare — typically used to filter noise).</summary>
         double WeightOf(string token);
+
+        /// <summary>
+        /// The full weighted term set the scorer should feed into BM25:
+        /// (token, weight) pairs for every original query token plus every
+        /// one-level synonym expansion. A token that appears in both the
+        /// originals and a synonym expansion is emitted exactly once with
+        /// weight 1.0 (originals win). Step 48e — single source of truth so
+        /// the scorer doesn't have to re-tokenize the query and can't
+        /// drift from <see cref="RagService.RetrieveAsync"/>.
+        /// </summary>
+        IEnumerable<(string Token, double Weight)> WeightedTerms();
     }
 
     /// <summary>
@@ -150,18 +161,28 @@ public sealed class HybridScorer
         if (tokenWeight is null) throw new ArgumentNullException(nameof(tokenWeight));
 
         // ---- 1. Tokenise query + chunks uniformly. -------------------
-        // We collect (i) the deduped, weighted query-term list and (ii) per-
-        // chunk TF maps + lengths. The tokeniser is FormKC, lower-case,
-        // and the same Splitter set as everything else in this file.
-        var queryTokens = TokenizeForTest(query ?? string.Empty)
-            .Where(t => !string.IsNullOrEmpty(t))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        // We collect (i) the weighted term set from ITokenWeight and (ii)
+        // per-chunk TF maps + lengths. The weighted term set is the single
+        // source of truth for what counts as a query term — it already
+        // contains the original query tokens (weight 1.0) and their one-
+        // level synonym expansions (weight RagSynonyms.SynonymWeight),
+        // tokenised and Bangla-normalised identically to chunks.
+        // Synonym chains never extend past one level (RagService controls
+        // the expansion depth). A token present in both the originals and
+        // a synonym expansion is collapsed back to 1.0 by the caller.
+        // (query is kept in the signature for callers that still want to
+        // log it, but it is no longer tokenised here.)
+        _ = query; // see comment above
         var weights = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        foreach (var t in queryTokens)
+        foreach (var (tok, w) in tokenWeight.WeightedTerms())
         {
-            var w = tokenWeight.WeightOf(t);
-            if (w > 0) weights[t] = w;
+            if (string.IsNullOrEmpty(tok)) continue;
+            if (w <= 0) continue;
+            // Originals win — a synonym expansion that happens to also be
+            // a literal query token keeps its 1.0 weight.
+            weights[tok] = weights.TryGetValue(tok, out var existing)
+                ? Math.Max(existing, w)
+                : w;
         }
 
         var chunkTfList = new Dictionary<string, int>[chunks.Count];

@@ -40,6 +40,11 @@ public static class RagSynonyms
             ["line"]        = new[] { "লাইন", "production line", "production lines", "lines" },
             ["juki"]        = new[] { "জুকি", "juki ddl-8700", "juki ddl-9000c", "juki lu-563" },
             ["brother"]     = new[] { "ব্রাদার", "brother bas-311h", "brother s-7300a" },
+            // Bangla → English bridges so queries like "অগ্নি নিরাপত্তা"
+            // surface the English fire-safety checklist chunks.
+            ["অগ্নি"]          = new[] { "fire", "আগুন", "অগ্নিকাণ্ড" },
+            ["আগুন"]          = new[] { "fire", "অগ্নি", "অগ্নিকাণ্ড" },
+            ["নিরাপত্তা"]      = new[] { "safety", "সুরক্ষা" },
         };
 
     /// <summary>

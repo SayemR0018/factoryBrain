@@ -222,6 +222,70 @@ on the `whatsapp_sim` channel. Conversation transcripts live in
 
 ---
 
+### 5.6 RAG (real `/api/ask`)
+
+The .NET 9 backend (`FactoryBrain.Api`) is the authoritative retrieval
+path for `/api/ask` since step 46. The Next.js frontend proxies `/api/*`
+to it (see `next.config.mjs`). The TypeScript services under
+`src/services/rag/*` are now a **legacy offline-only fallback** —
+preserved for offline tooling, not loaded by any live route.
+
+**Providers** (resolved at runtime; first probe wins):
+- `local` — deterministic MD5-bucketed token-frequency embedder
+  (default; no key required).
+- `stub` — deterministic embedder for tests / smoke runs. Same model id
+  as `local`, just a different namespace so reindex paths can be
+  isolated.
+- `openai` — hosted embeddings via `text-embedding-3-small` (1536-d).
+- `gemini` — hosted embeddings via Google's `text-embedding-004`
+  (768-d).
+
+**Env var names** (the values come from your local `.env` or container
+secret store — never commit):
+- `RAG_EMBEDDING_PROVIDER`
+- `RAG_EMBEDDING_MODEL`
+- `RAG_EMBEDDING_API_KEY` (falls back to `LLM_API_KEY`)
+- `RAG_EMBEDDING_DIMENSIONS`
+- `RAG_HYBRID_BM25_WEIGHT`
+- `RAG_HYBRID_VECTOR_WEIGHT`
+- `RAG_MIN_SCORE`
+- `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL` (only used for the
+  optional live LLM path inside `/api/ask`; the demo deterministic
+  fallback runs when these are unset)
+
+**Endpoints** (all proxied to the backend via `next.config.mjs`):
+- `POST /api/ask` — the only retrieval surface the UI uses.
+- `POST /api/rag/ingest` — add a document to the index.
+- `GET  /api/rag/documents` — list ingested documents.
+- `POST /api/rag/reindex` — re-embed every chunk against the active
+  provider.
+- `GET  /api/rag/status` — current provider / model / dims / degraded
+  flag.
+- `GET  /api/brief/morning` — morning brief (consumes `ragHits`).
+
+**Demo corpus.** The `manual_documents` rows the backend seeds on a
+fresh database are **demo content** — `IsDemo=true` rows whose ids all
+start with `demo-` (e.g. `demo-needle-breakage-sop`,
+`demo-aql-2.5-sampling`, `demo-bangla-rag-faq`). They are intentionally
+fictitious and are not production manuals. Replace them with real
+content via `POST /api/rag/ingest` before any customer-facing
+deployment.
+
+**How to run the eval.** The golden-set eval
+(`scripts/test-rag.mjs`) hits `/api/ask` on a live backend and asserts
+a top-3 hit rate ≥ 0.85 across 22 questions (12 EN + 8 BN + 2
+nonsense). It is wired into `npm run smoke` and also runs standalone:
+
+```bash
+RAG_EVAL_BASE_URL=http://localhost:5099 npm run test:rag
+```
+
+`RAG_EVAL_BASE_URL` defaults to `http://localhost:5099`; override for
+CI / staging. Exit code is non-zero on any failure or when the
+top-3 hit rate drops below 0.85.
+
+---
+
 ## 6. Where to start tomorrow
 
 1. **Run the demo yourself first.** `npm install && npm run build && npm run start`,

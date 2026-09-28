@@ -156,6 +156,10 @@ on every Simulate tick. Read top-to-bottom:
 5. Switch language via the topbar — the Bangla query
    ("লাইন ৩ কেন পিছিয়ে?") returns a Bangla answer with the same
    evidence rows.
+6. Type **"সুই ভাঙা"** (needle breakage, Bangla) — the response streams
+   in five phases and the Evidence block lists a citation for the
+   needle-breakage SOP (`demo-needle-breakage-sop`) plus the Bangla FAQ
+   (`demo-bangla-rag-faq`). The finding is rendered in Bangla.
 
 ---
 

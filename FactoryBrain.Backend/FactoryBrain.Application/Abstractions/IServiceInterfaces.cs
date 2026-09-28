@@ -253,6 +253,26 @@ public interface ITokenService
 public sealed record TokenPrincipal(Guid UserId, string Email, string Role);
 
 /// <summary>
+/// Server-to-client realtime notifications. Implemented in
+/// <c>FactoryBrain.Api.Realtime</c> over SignalR's
+/// <c>IHubContext&lt;FactoryHub&gt;</c>; services consume only this
+/// abstraction so <c>FactoryBrain.Infrastructure</c> never references
+/// SignalR. All methods MUST swallow + log any failure — a notifier
+/// outage must never fail the REST write that triggered it.
+/// </summary>
+public interface IRealtimeNotifier
+{
+    /// <summary>Broadcast after a successful <c>POST /api/sensors/ingest</c>.</summary>
+    Task SensorReadingAsync(IngestResponse payload, CancellationToken ct);
+
+    /// <summary>Broadcast after a successful <c>POST /api/line-board/refresh</c>.</summary>
+    Task LineBoardUpdatedAsync(LineBoardResponse payload, CancellationToken ct);
+
+    /// <summary>Broadcast after <see cref="IFloorAlertService.PushAsync"/> persists a new alert.</summary>
+    Task FloorAlertAsync(FloorAlert payload, CancellationToken ct);
+}
+
+/// <summary>
 /// Small wrapper over
 /// <c>Microsoft.AspNetCore.Identity.PasswordHasher&lt;User&gt;</c> so the
 /// Application layer doesn't depend on Microsoft.Extensions.Identity

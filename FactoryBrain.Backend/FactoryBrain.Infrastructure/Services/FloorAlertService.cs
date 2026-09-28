@@ -10,7 +10,12 @@ namespace FactoryBrain.Infrastructure.Services;
 public sealed class FloorAlertService : IFloorAlertService
 {
     private readonly FactoryBrainDbContext _db;
-    public FloorAlertService(FactoryBrainDbContext db) { _db = db; }
+    private readonly IRealtimeNotifier _notifier;
+    public FloorAlertService(FactoryBrainDbContext db, IRealtimeNotifier notifier)
+    {
+        _db = db;
+        _notifier = notifier;
+    }
 
     public async Task<FloorAlertListResponse> ListAsync(CancellationToken ct)
     {
@@ -39,6 +44,12 @@ public sealed class FloorAlertService : IFloorAlertService
         if (existing is null) await _db.FloorAlerts.AddAsync(alert, ct);
         else _db.Entry(existing).CurrentValues.SetValues(alert);
         await _db.SaveChangesAsync(ct);
+
+        // Realtime broadcast — fires on both insert and upsert so the
+        // supervisor page reflects every persisted alert. Best-effort:
+        // the notifier swallows its own errors.
+        await _notifier.FloorAlertAsync(alert, ct);
+
         return alert;
     }
 

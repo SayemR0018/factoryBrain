@@ -43,6 +43,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using System.Threading.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
@@ -50,11 +51,14 @@ using DotNetEnv;
 using FactoryBrain.Infrastructure.Persistence;
 using FactoryBrain.Api.Middleware;
 using FactoryBrain.Infrastructure.Services;
+using FactoryBrain.Infrastructure.HostedServices;
 using FactoryBrain.Application.Abstractions.Interfaces;
 using FactoryBrain.Application.Rag;
 using FactoryBrain.Infrastructure.Rag;
 using FactoryBrain.Infrastructure.Configuration;
 using FactoryBrain.Api.Services;
+using FactoryBrain.Api.Realtime;
+using FactoryBrain.Api.Hubs;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -288,6 +292,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             NameClaimType            = JwtRegisteredClaimNames.Email,
             RoleClaimType            = System.Security.Claims.ClaimTypes.Role,
         };
+
+        // Browsers can't set Authorization headers on WebSocket upgrade
+        // requests, so for /hubs/* we also accept the access token via
+        // the `access_token` query string. Restricted to the hub path:
+        // every other route keeps header-only auth. The query-string
+        // value is consumed by the handler — it never reaches the
+        // hub method or the log line.
+        o.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var path = ctx.Request.Path;
+                if (path.StartsWithSegments("/hubs", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (ctx.Request.Query.TryGetValue("access_token", out var tokenValues)
+                        && !string.IsNullOrWhiteSpace(tokenValues.ToString()))
+                    {
+                        ctx.Token = tokenValues.ToString();
+                    }
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 // ─── Authorization policies ───────────────────────────────────────────────
@@ -474,6 +501,19 @@ builder.Services.AddScoped<IVisionService,     VisionService>();
 builder.Services.AddScoped<IAgentRunService,   AgentRunService>();
 builder.Services.AddScoped<ILlmSettingsService, LlmSettingsService>();
 builder.Services.AddScoped<IBriefService,      BriefService>();
+
+// ─── Realtime (SignalR) ────────────────────────────────────────────────────
+// FactoryHub is server-to-client only — clients don't call hub methods.
+// IRealtimeNotifier is the Application-layer seam Infrastructure services
+// call after a successful REST write, so SignalR stays out of the
+// Infrastructure project.
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
+
+// Optional background simulator. Reads SIMULATOR_ENABLED / SIMULATOR_SEED
+// at construction; when SIMULATOR_ENABLED is unset or false the service
+// short-circuits inside ExecuteAsync and no timer is started.
+builder.Services.AddHostedService<SimulatorHostedService>();
 
 // HTTP client used by AskService / AgentRunService + hosted embedders.
 builder.Services.AddHttpClient();
@@ -731,6 +771,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();                              // Attribute-routed controllers
+app.MapHub<FactoryHub>("/hubs/factory");           // SignalR hub — server→client only
 app.MapHealthChecks("/health");                    // Health probe
 
 app.MapGet("/", () => Results.Ok(new

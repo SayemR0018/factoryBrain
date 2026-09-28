@@ -424,6 +424,60 @@ startup with the entry name in the message.
 | `FORWARDED_HEADERS_ENABLED`| `Program.cs`                          | `true` activates `UseForwardedHeaders`. Default off. |
 | `TRUSTED_PROXIES`          | `Program.cs`                          | Comma-separated IPs / CIDRs. Empty = log warning, trust `X-Forwarded-For` from any sender (safe only when the API is reachable exclusively through the proxy). Bad entries fail startup with the entry name in the message. |
 
+## 8. Realtime (SignalR)
+
+### 8.1 Hub
+
+- Path: `/hubs/factory` (mapped via `app.MapHub<FactoryHub>`).
+- Server-to-client only — `FactoryHub : Hub` has no client-callable methods.
+- Auth: `[Authorize]` on the hub class. Anonymous negotiate → 401; a WebSocket can never be established without a valid access token (any role).
+- The token can travel two ways:
+  - `Authorization: Bearer <jwt>` header on the HTTP/1.1 upgrade (works for non-browser clients).
+  - `?access_token=<jwt>` query string on the URL — required for browsers because they cannot set headers on a WebSocket upgrade request.
+- The query-string fallback is **only** enabled for paths under `/hubs/`. Every other route keeps header-only auth, so `GET /api/auth/me?access_token=…` is rejected with 401.
+- `access_token` query values are consumed by `JwtBearerEvents.OnMessageReceived` and never reach the hub method, the access log, or the request log.
+
+### 8.2 Events
+
+| Event name           | Trigger                                            | Payload DTO                                            |
+| -------------------- | -------------------------------------------------- | ------------------------------------------------------ |
+| `sensorReading`      | Successful `POST /api/sensors/ingest`              | `IngestResponse` (same body the REST endpoint returns) |
+| `lineBoardUpdated`   | Successful `POST /api/line-board/refresh`          | `LineBoardResponse` (same body the REST endpoint returns) |
+| `floorAlert`         | `FloorAlertService.PushAsync` writes a new alert    | `FloorAlert` entity                                    |
+
+Implementation seam: `IRealtimeNotifier` (Application layer) → `SignalRRealtimeNotifier` (Api layer, `IHubContext<FactoryHub>`). Services call the abstraction after the DB write succeeds; a notifier failure is logged and never fails the REST request.
+
+### 8.3 Simulator (optional background service)
+
+When `SIMULATOR_ENABLED=true`, `SimulatorHostedService` drives the live event stream without any REST traffic:
+
+- Every **5 s** → `ISensorService.IngestAsync(Tick: null)` → `sensorReading` event.
+- Every **30 s** → `ILineBoardService.RefreshAsync(null)` → `lineBoardUpdated` event.
+
+`SIMULATOR_SEED` (optional int) makes the sensor RNG deterministic — same seed → same first N readings (after ignoring timestamps and ids). Unset → random seed logged once at startup. Invalid values fail startup with the entry name in the message. The service short-circuits when `SIMULATOR_ENABLED` is unset or `false`, so default deployments never run it.
+
+### 8.4 Reverse proxy
+
+A reverse proxy in front of the API **must** forward WebSocket upgrades on `/hubs/`. `nginx` example:
+
+```
+location /hubs/ {
+    proxy_pass http://api:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+}
+```
+
+Without the `Upgrade`/`Connection` headers the negotiate succeeds but the WebSocket transport falls back to long-polling or fails outright.
+
+> The `meta.source` field on `LineBoardResponse` was retargeted to
+> `FactoryBrain.Infrastructure/Services/SensorService` in step 53
+> (was `FactoryBrain.Api/Services/SensorService` from the pre-split
+> codebase). This is the only intentional response-shape difference
+> vs `b57e837`.
+
 > The `users` table is created by the `20260928192118_AddUsers` EF
 > migration (step 52). After `Database.Migrate()` the `__ef_migrations`
 > history table has 5 rows.

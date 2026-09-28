@@ -12,11 +12,12 @@ public sealed class LineBoardService : ILineBoardService
 {
     private readonly FactoryBrainDbContext _db;
     private readonly ISensorService _sensors;
+    private readonly IRealtimeNotifier _notifier;
     private static readonly Random _rng = new(0xBEEF);
 
-    public LineBoardService(FactoryBrainDbContext db, ISensorService sensors)
+    public LineBoardService(FactoryBrainDbContext db, ISensorService sensors, IRealtimeNotifier notifier)
     {
-        _db = db; _sensors = sensors;
+        _db = db; _sensors = sensors; _notifier = notifier;
     }
 
     public async Task<LineBoardResponse> BuildAsync(CancellationToken ct)
@@ -39,7 +40,7 @@ public sealed class LineBoardService : ILineBoardService
 
         return new LineBoardResponse(mapped, new LineBoardMeta(
             Simulated: true,
-            Source: "Simulated — derived from FactoryBrain.Api/Services/SensorService sim buffer (no live PLC/Modbus/MQTT traffic)",
+            Source: "Simulated — derived from FactoryBrain.Infrastructure/Services/SensorService sim buffer (no live PLC/Modbus/MQTT traffic)",
             Tick: state.Tick,
             UpdatedAt: DateTime.UtcNow,
             Notes: "Deterministic per-line seed + latest server sim state. NPT grows with efficiency gap; WIP drifts on tick."
@@ -50,6 +51,11 @@ public sealed class LineBoardService : ILineBoardService
     {
         if (tickOverride.HasValue) await _sensors.IngestAsync(new IngestRequest(tickOverride), ct);
         else await _sensors.IngestAsync(new IngestRequest(null), ct);
-        return await BuildAsync(ct);
+        var response = await BuildAsync(ct);
+
+        // Realtime broadcast — best-effort, notifier swallows its own errors.
+        await _notifier.LineBoardUpdatedAsync(response, ct);
+
+        return response;
     }
 }

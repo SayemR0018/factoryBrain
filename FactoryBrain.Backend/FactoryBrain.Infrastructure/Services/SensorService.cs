@@ -25,11 +25,21 @@ public sealed class SensorService : ISensorService
 
     private static readonly object _gate = new();
     private static SimState _state = Seed();
+    /// <summary>
+    /// Optional XOR-mixed seed supplied by <c>SIMULATOR_SEED</c>. When
+    /// non-zero, every <see cref="StepTick"/> RNG combines it with the
+    /// tick number so two runs with the same seed produce the same
+    /// first N readings (after ignoring timestamps and ids). Defaults
+    /// to 0 — i.e. the existing per-tick seed <c>0xA11CE ^ Tick</c>.
+    /// </summary>
+    public static int SimulatorSeedOverride;
     private readonly FactoryBrainDbContext _db;
+    private readonly IRealtimeNotifier _notifier;
 
-    public SensorService(FactoryBrainDbContext db)
+    public SensorService(FactoryBrainDbContext db, IRealtimeNotifier notifier)
     {
         _db = db;
+        _notifier = notifier;
         SyncNextIdFromDatabaseAsync().GetAwaiter().GetResult();
     }
 
@@ -83,7 +93,7 @@ public sealed class SensorService : ISensorService
         var readings = _state.Readings.Take(50)
             .Select(ToDto).ToList();
 
-        return new IngestResponse(
+        var response = new IngestResponse(
             Simulated: true,
             Source: "Simulated — no live PLC / Modbus / MQTT traffic",
             Tick: _state.Tick,
@@ -91,6 +101,11 @@ public sealed class SensorService : ISensorService
             Lines: _state.Lines.Select(l => new LineSummaryDto(l.Id, l.Efficiency, l.Uptime, l.EnergyKwh)).ToList(),
             Machines: _state.Machines.Select(m => new MachineSummaryDto(m.Id, m.Vibration, m.Temperature, m.DutyCycle, m.Status)).ToList()
         );
+
+        // Realtime broadcast (best-effort — the notifier swallows its own errors).
+        await _notifier.SensorReadingAsync(response, ct);
+
+        return response;
     }
 
     public Task<LatestReadingsResponse> LatestAsync(CancellationToken ct)
@@ -141,8 +156,11 @@ public sealed class SensorService : ISensorService
     {
         // Tick-scoped RNG; readings use the global _state.NextId counter so IDs
         // are unique across the whole process (multiple StepTicks per Ingest).
+        // When the simulator sets SimulatorSeedOverride != 0, the seed is
+        // XOR'd in so two runs with the same seed produce identical
+        // readings (modulo timestamps and ids).
         var ts = DateTime.UtcNow;
-        var rng = new Random(0xA11CE ^ (_state.Tick + 1));
+        var rng = new Random((0xA11CE ^ (_state.Tick + 1)) ^ SimulatorSeedOverride);
 
         var profiles = new (SensorSource Source, string Metric, string Unit, double Lo, double Hi, string Entity)[]
         {

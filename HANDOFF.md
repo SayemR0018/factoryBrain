@@ -277,12 +277,14 @@ a top-3 hit rate ≥ 0.85 across 22 questions (12 EN + 8 BN + 2
 nonsense). It is wired into `npm run smoke` and also runs standalone:
 
 ```bash
-RAG_EVAL_BASE_URL=http://localhost:5099 npm run test:rag
+RAG_EVAL_BASE_URL=http://localhost:5000 npm run test:rag
 ```
 
-`RAG_EVAL_BASE_URL` defaults to `http://localhost:5099`; override for
-CI / staging. Exit code is non-zero on any failure or when the
-top-3 hit rate drops below 0.85.
+The eval resolves the API base URL in this order, first non-empty wins:
+`RAG_EVAL_BASE_URL`, then `NEXT_PUBLIC_API_URL`, then `DOTNET_API_URL`,
+then the default `http://localhost:5000`. Any trailing slash is
+stripped, and the resolved URL is printed once at startup. Exit code
+is non-zero on any failure or when the top-3 hit rate drops below 0.85.
 
 ---
 

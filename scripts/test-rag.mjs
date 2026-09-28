@@ -18,9 +18,13 @@
 //     - nonsense queries return zero citations AND zero ragHits AND
 //       the fixed "No confident source was found" finding string
 //
-// The base URL defaults to http://localhost:5099 — the same port the
-// smoke workflow binds the dotnet backend to. Override with
-// RAG_EVAL_BASE_URL when running against a different host.
+// The base URL is resolved in this order, first non-empty wins:
+//   1. RAG_EVAL_BASE_URL
+//   2. NEXT_PUBLIC_API_URL
+//   3. DOTNET_API_URL
+//   4. "http://localhost:5000"
+// Any trailing slash is stripped before use. The resolved URL is printed
+// once at startup so logs make it obvious which backend was hit.
 //
 // Exit code: 0 on full pass, 1 on any failure.
 
@@ -30,10 +34,25 @@ import process from "node:process";
 // Config
 // ---------------------------------------------------------------------------
 
-const BASE_URL =
-  process.env.RAG_EVAL_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:5099";
+function firstNonEmpty(...values) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return null;
+}
+
+const RAW_BASE_URL =
+  firstNonEmpty(
+    process.env.RAG_EVAL_BASE_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+    process.env.DOTNET_API_URL
+  ) ?? "http://localhost:5000";
+
+const BASE_URL = RAW_BASE_URL.replace(/\/$/, "");
 const PATH_ASK = process.env.RAG_EVAL_PATH ?? "/api/ask";
 const TIMEOUT_MS = Number(process.env.RAG_EVAL_TIMEOUT_MS ?? 10000);
+
+console.log(`RAG eval base URL: ${BASE_URL}`);
 
 // ---------------------------------------------------------------------------
 // Golden set — 22 questions.

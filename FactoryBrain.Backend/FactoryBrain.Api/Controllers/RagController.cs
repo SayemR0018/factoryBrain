@@ -3,7 +3,6 @@ using FactoryBrain.Application.Dtos.Rag;
 using FactoryBrain.Api.Middleware;
 using FactoryBrain.Application.Abstractions.Interfaces;
 using FactoryBrain.Infrastructure.Rag;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,7 +52,6 @@ public class RagController : ControllerBase
     private readonly ILoggerFactory _loggerFactory;
     private readonly FactoryBrainDbContext _db;
     private readonly ILogger<RagController> _log;
-    private readonly IValidator<RagIngestRequest> _ingestValidator;
 
     public RagController(
         IRagService rag,
@@ -63,12 +61,11 @@ public class RagController : ControllerBase
         IHttpClientFactory http,
         ILoggerFactory loggerFactory,
         FactoryBrainDbContext db,
-        ILogger<RagController> log,
-        IValidator<RagIngestRequest> ingestValidator)
+        ILogger<RagController> log)
     {
         _rag = rag; _resolver = resolver; _admin = admin;
         _monitor = monitor; _http = http; _loggerFactory = loggerFactory;
-        _db = db; _log = log; _ingestValidator = ingestValidator;
+        _db = db; _log = log;
     }
 
     /// <summary>
@@ -175,17 +172,10 @@ public class RagController : ControllerBase
     [AdminToken]
     public async Task<IActionResult> Ingest([FromBody] RagIngestRequest body, CancellationToken ct)
     {
-        var validation = await _ingestValidator.ValidateAsync(body ?? new RagIngestRequest("", null, "", null, "", null), ct);
-        if (!validation.IsValid)
-        {
-            // Match the canonical {error, details} envelope; the
-            // middleware picks up everything that wasn't already a
-            // structured response.
-            var details = string.Join("; ", validation.Errors
-                .Select(e => $"{e.PropertyName}: {e.ErrorMessage}"));
-            return BadRequest(new { error = "ValidationError", details });
-        }
-
+        // Step 51: body validation runs in the global FluentValidationFilter
+        // (registered in Program.cs); on failure it short-circuits with a
+        // 400 ValidationProblemDetails (RFC 7807 with an errors map) before
+        // this method runs.
         var outcome = await _rag.IngestAsync(new IngestInput(
             Title:   body!.Title.Trim(),
             TitleBn: string.IsNullOrWhiteSpace(body.TitleBn) ? null : body.TitleBn.Trim(),

@@ -1,6 +1,5 @@
 using FactoryBrain.Application.Dtos.Qc;
 using FactoryBrain.Application.Abstractions.Interfaces;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FactoryBrain.Api.Controllers;
@@ -10,21 +9,19 @@ namespace FactoryBrain.Api.Controllers;
 public class QcController : ControllerBase
 {
     private readonly IQcService _svc;
-    private readonly IValidator<QcFlagRequest> _validator;
 
-    public QcController(IQcService svc, IValidator<QcFlagRequest> v)
-    { _svc = svc; _validator = v; }
+    public QcController(IQcService svc)
+    { _svc = svc; }
 
     [HttpGet("defects")]
     public async Task<IActionResult> Defects(CancellationToken ct)
         => Ok(await _svc.BuildAsync(ct));
 
+    // Step 51: body validation runs in the global FluentValidationFilter
+    // (registered in Program.cs); on failure it short-circuits with a 400
+    // ValidationProblemDetails (RFC 7807 with an errors map) before this
+    // method runs.
     [HttpPost("flag")]
     public async Task<IActionResult> Flag([FromBody] QcFlagRequest body, CancellationToken ct)
-    {
-        var res = await _validator.ValidateAsync(body, ct);
-        if (!res.IsValid)
-            return BadRequest(new { error = "invalid_body", issues = res.Errors });
-        return Ok(await _svc.FlagAsync(body, ct));
-    }
+        => Ok(await _svc.FlagAsync(body, ct));
 }

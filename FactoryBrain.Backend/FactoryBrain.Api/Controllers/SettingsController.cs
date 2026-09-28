@@ -1,7 +1,6 @@
 using FactoryBrain.Application.Dtos.Settings;
 using FactoryBrain.Api.Middleware;
 using FactoryBrain.Application.Abstractions.Interfaces;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FactoryBrain.Api.Controllers;
@@ -11,10 +10,9 @@ namespace FactoryBrain.Api.Controllers;
 public class SettingsController : ControllerBase
 {
     private readonly ILlmSettingsService _svc;
-    private readonly IValidator<LlmSettingsRequest> _validator;
 
-    public SettingsController(ILlmSettingsService svc, IValidator<LlmSettingsRequest> v)
-    { _svc = svc; _validator = v; }
+    public SettingsController(ILlmSettingsService svc)
+    { _svc = svc; }
 
     // Step 48b — GET/POST /api/settings/llm are served by THIS controller.
     // The Next.js rewrite in `next.config.mjs` forwards every /api/:path*
@@ -51,9 +49,12 @@ public class SettingsController : ControllerBase
     public IActionResult Post([FromBody] LlmSettingsRequest body)
     {
         StampNoStore();
-        var res = _validator.Validate(body);
-        if (!res.IsValid)
-            return BadRequest(new { error = "invalid_body", issues = res.Errors });
+        // Step 51: body validation runs in the global FluentValidationFilter
+        // (registered in Program.cs); on failure it short-circuits with a
+        // 400 ValidationProblemDetails (RFC 7807 with an errors map) before
+        // this method runs. The controller's catch (ArgumentException ex)
+        // still emits the canonical {error: "invalid_provider"} envelope for
+        // the runtime check below — both shapes coexist on this route.
         try { return Ok(_svc.Update(body)); }
         catch (ArgumentException ex)
         {

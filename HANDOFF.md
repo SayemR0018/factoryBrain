@@ -294,6 +294,17 @@ ships with the repo; build it from the repo root with
 `docker build -f FactoryBrain.Backend/FactoryBrain.Api/Dockerfile -t factorybrain-api:dev .`
 (no deploy steps here — that's what k8s/Compose is for).
 
+**CORS allowlist.** The API exposes a single named policy (`AllowListed`)
+that reads `CORS_ORIGINS` — a comma-separated list of exact origins,
+trimmed, no wildcards. When unset the default is `http://localhost:5173`
+(the common Vite dev port), so a fresh checkout just-works without any
+extra config. The policy allows any header, the methods
+`GET / POST / PUT / PATCH / DELETE`, and credentials. Set
+`CORS_ORIGINS=https://app.example.com,https://staging.example.com` in
+production. Preflight (`OPTIONS`) requests are answered by the framework
+before auth runs, so a browser can verify CORS even when the request
+itself would 401.
+
 **Supabase.**
 - *Used today:* only `FACTORYBRAIN_DB`. The API connects to Postgres
   directly, and migrations run at startup. Use the **Session pooler**

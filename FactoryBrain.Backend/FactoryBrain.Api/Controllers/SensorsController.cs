@@ -1,6 +1,5 @@
 using FactoryBrain.Application.Dtos.Sensors;
 using FactoryBrain.Application.Abstractions.Interfaces;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FactoryBrain.Api.Controllers;
@@ -10,22 +9,17 @@ namespace FactoryBrain.Api.Controllers;
 public class SensorsController : ControllerBase
 {
     private readonly ISensorService _svc;
-    private readonly IValidator<IngestRequest> _validator;
 
-    public SensorsController(ISensorService svc, IValidator<IngestRequest> v)
-    { _svc = svc; _validator = v; }
+    public SensorsController(ISensorService svc)
+    { _svc = svc; }
 
+    // Step 51: body validation runs in the global FluentValidationFilter
+    // (registered in Program.cs); on failure it short-circuits with a 400
+    // ValidationProblemDetails (RFC 7807 with an errors map) before this
+    // method runs.
     [HttpPost("ingest")]
     public async Task<IActionResult> Ingest([FromBody] IngestRequest? body, CancellationToken ct)
-    {
-        if (body is not null)
-        {
-            var res = await _validator.ValidateAsync(body, ct);
-            if (!res.IsValid)
-                return BadRequest(new { error = "invalid_body", issues = res.Errors });
-        }
-        return Ok(await _svc.IngestAsync(body ?? new IngestRequest(null), ct));
-    }
+        => Ok(await _svc.IngestAsync(body ?? new IngestRequest(null), ct));
 
     [HttpGet("ingest")]
     public async Task<IActionResult> IngestStatus(CancellationToken ct)

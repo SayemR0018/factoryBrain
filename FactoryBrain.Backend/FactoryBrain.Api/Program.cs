@@ -73,31 +73,96 @@ builder.Logging.AddSimpleConsole(o =>
 builder.Services
     .AddControllers()
     // Coerce every [ApiController] model-binding failure (malformed JSON,
-    // empty body, [Required] misses, type mismatches) into the canonical
-    // {error:"ValidationError", details:"<field>: <message>; ..."} envelope.
-    // Without this the framework returns a default ValidationProblemDetails
-    // 400, which the rest of the API doesn't speak.
+    // empty body, [Required] misses, type mismatches) into the same RFC 7807
+    // ValidationProblemDetails envelope the FluentValidationFilter emits.
+    // Without this override the framework returns a default
+    // ValidationProblemDetails 400 with type names / JSON paths / byte
+    // positions in the messages; we redirect every failure through
+    // ValidationProblemFactory so the messages collapse to one of three
+    // canonical shapes (required / wrong type / unparseable JSON) and the
+    // keys become camelCase field names (or "body" for parse failures).
     .ConfigureApiBehaviorOptions(o =>
     {
         o.InvalidModelStateResponseFactory = ctx =>
         {
-            var details = string.Join("; ", ctx.ModelState
-                .Where(kvp => kvp.Value!.Errors.Count > 0)
+            // Step 51-fix-3: the model-state funnel runs in four steps.
+            //   (1) Resolve the bound action parameter's name AND CLR type
+            //       once per request. The type lets the funnel decide
+            //       whether a candidate whole-request key (e.g. the
+            //       actionParamName itself, or a future binding literally
+            //       named "model") is also a real property on the DTO —
+            //       if it is, the error is treated as a real field and
+            //       must NOT collapse onto "body".
+            //   (2) Flatten ModelState into (key, message, exception) and
+            //       scrub each one onto one of the three canonical shapes
+            //       (required / wrong type / unparseable JSON) via the
+            //       factory's ScrubModelStateMessage.
+            //   (3) Drop whole-request "required" entries when at least
+            //       one more-specific error exists. This collapses
+            //       {query:123} -> only errors.query and
+            //       notjson       -> only errors.body.
+            //   (4) Normalise each remaining key (strip "$." / "$", camel-
+            //       case the last segment, fold the synthetic body
+            //       spellings, including the bound action parameter's
+            //       name when it is not a real DTO property) via
+            //       ValidationProblemFactory.NormaliseModelStateKey, then
+            //       hand the canonicalised errors to the factory.
+            var (actionParamName, actionParamType) = ResolveBodyParam(ctx);
+
+            var scrubbed = ctx.ModelState
+                .Where(kvp => kvp.Value is not null && kvp.Value!.Errors.Count > 0)
                 .SelectMany(kvp => kvp.Value!.Errors
-                    .Select(e => $"{kvp.Key}: {e.ErrorMessage}")));
-            return new BadRequestObjectResult(new
-            {
-                error   = "ValidationError",
-                details
-            });
+                    .Select(e => new
+                    {
+                        Raw   = kvp.Key,
+                        Canon = ValidationProblemFactory.ScrubModelStateMessage(
+                            new ValidationProblemError(
+                                kvp.Key,
+                                e.ErrorMessage ?? e.Exception?.Message,
+                                e.Exception)),
+                    }))
+                .Where(x => !string.IsNullOrEmpty(x.Canon))
+                .ToList();
+
+            var totalCount = scrubbed.Count;
+            var raw = scrubbed
+                .Where(x => !(totalCount > 1
+                              && ValidationProblemFactory.IsWholeRequestModelStateKey(
+                                  x.Raw, actionParamName, actionParamType)
+                              && ValidationProblemFactory.IsRequiredCanonicalMessage(x.Canon)))
+                .Select(x => new ValidationProblemError(
+                    ValidationProblemFactory.NormaliseModelStateKey(
+                        x.Raw, actionParamName, actionParamType),
+                    x.Canon,
+                    null));
+
+            return ValidationProblemFactory.BuildResult(ctx.HttpContext, raw);
         };
     })
     .AddJsonOptions(o =>
     {
+        // Hard backstop — when false, the System.Text.Json input formatter
+        // records a bare field name in ModelState and drops the raw
+        // exception text (the one with .NET type names, JSON paths, line
+        // and byte positions). Even with this off, the factory above
+        // rewrites any message that did slip through, so this is
+        // belt-and-braces.
+        o.AllowInputFormatterExceptionMessages = false;
+
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         o.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
+
+// ─── RFC 7807 ProblemDetails ───────────────────────────────────────────────
+// Step 51: register the IExceptionHandler that funnels uncaught throws
+// into application/problem+json (see GlobalExceptionHandler.cs). Also add
+// the framework's ProblemDetails service so UseStatusCodePages emits
+// ProblemDetails-shaped bodies for bare 404 / 405 responses, and so any
+// future IResult-returning route can opt into ProblemDetails without
+// repeating the formatter wiring.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // ─── PostgreSQL + EF Core (FactoryBrainDbContext) ─────────────────────────
 var pgConn =
@@ -121,12 +186,27 @@ builder.Services.AddDbContext<FactoryBrainDbContext>(opts =>
     }
 });
 
-// ─── FluentValidation (assembly scan) ──────────────────────────────────────
+// ─── FluentValidation (assembly scan + global action filter) ──────────────
 // Validators live in FactoryBrain.Application (AbstractValidator<TDto> for
 // the DTOs that live alongside them), so the scan must run over that
 // assembly — not over the Api assembly, which no longer holds any
 // validators.
+//
+// Step 51: every controller's POST body is validated by the global
+// FluentValidationFilter below. The filter resolves IValidator<T> for
+// each action argument whose concrete type has a registered validator,
+// runs the rules, and short-circuits with a 400 ValidationProblemDetails
+// (RFC 7807 with an errors map) on failure. Routes that already return
+// their own explicit envelope (AdminToken* / 409 degraded reindex /
+// controller-emitted BadRequest for LlmSettingsRequest invalid_provider)
+// keep that envelope — the filter never replaces a controller's own
+// explicit BadRequest / Conflict / Forbid result.
 builder.Services.AddValidatorsFromAssemblyContaining<FactoryBrain.Application.Dtos.Ask.AskRequest>();
+builder.Services.AddScoped<FluentValidationFilter>();
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o =>
+{
+    o.Filters.AddService<FluentValidationFilter>();
+});
 
 // ─── Admin-token gate (bound to the three write actions via [AdminToken]) ──
 // Replaces the old path-matching middleware: the filter is invoked only on
@@ -186,17 +266,30 @@ builder.Services.AddScoped<IBriefService,      BriefService>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
-// ─── CORS — Next.js dev origins (frontend proxy host) ──────────────────────
-// Spec: origins http://localhost:3000 and http://127.0.0.1:3000,
-// any method, any header, credentials.
+// ─── CORS — exact-origin allowlist (CORS_ORIGINS, default http://localhost:5173) ──
+// Step 51: the named "AllowListed" policy reads CORS_ORIGINS (comma-separated
+// exact origins, trimmed). When unset, the default is http://localhost:5173
+// so a fresh checkout just-works with the most common Vite dev port. Any
+// header, GET/POST/PUT/PATCH/DELETE, credentials allowed. No wildcards on
+// the origin list — wildcard origins + credentials would be rejected by
+// the spec at the browser level anyway, so we forbid them here.
+const string CorsPolicyName = "AllowListed";
 builder.Services.AddCors(o =>
-    o.AddPolicy("NextDev", p =>
-        p.WithOrigins(
-               "http://localhost:3000",
-               "http://127.0.0.1:3000")
+{
+    o.AddPolicy(CorsPolicyName, p =>
+    {
+        var raw = Environment.GetEnvironmentVariable("CORS_ORIGINS");
+        var origins = (string.IsNullOrWhiteSpace(raw)
+            ? "http://localhost:5173"
+            : raw)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        p.WithOrigins(origins)
          .AllowAnyHeader()
-         .AllowAnyMethod()
-         .AllowCredentials()));
+         .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+         .AllowCredentials();
+    });
+});
 
 // ─── Swagger / OpenAPI (Development only) ──────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -333,8 +426,25 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ─── Middleware pipeline ───────────────────────────────────────────────────
-app.UseMiddleware<GlobalExceptionMiddleware>();   // 1. JSON error envelope
-app.UseMiddleware<NoStoreMiddleware>();           // 2. Cache-Control: no-store on /api/* GETs
+// Step 51: replace the old GlobalExceptionMiddleware with the framework's
+// IExceptionHandler pipeline. UseExceptionHandler() picks up the
+// GlobalExceptionHandler registered via AddExceptionHandler<>() above; it
+// catches unhandled throws AFTER the rest of the pipeline has run, so
+// explicit error envelopes (AdminTokenMissing, AdminTokenNotConfigured,
+// 409 EmbeddingProviderUnavailable, missing_id, alert_not_found, etc.) are
+// unaffected. UseStatusCodePages emits RFC 7807 ProblemDetails for bare
+// 404/405 responses (i.e. routes that don't exist or methods that aren't
+// allowed on a route).
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+// Cache-Control: no-store on every /api/* GET and every status-bearing
+// POST/PUT/PATCH/DELETE so simulated / live data is never cached by
+// intermediaries (browsers, CDNs, Next.js data cache). The contract is
+// enforced by scripts/smoke.mjs's assertNoStore probe. Must run BEFORE
+// UseRouting/UseCors so the header is stamped even when the downstream
+// middleware short-circuits (e.g. on a 401/403).
+app.UseMiddleware<NoStoreMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -343,12 +453,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
-app.UseCors("NextDev");                            // 2. CORS for the Next.js origin
+app.UseCors(CorsPolicyName);                       // CORS for the configured allowlist
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();                              // 3. Attribute-routed controllers
-app.MapHealthChecks("/health");                    // 4. Health probe
+app.MapControllers();                              // Attribute-routed controllers
+app.MapHealthChecks("/health");                    // Health probe
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -390,6 +500,44 @@ app.Run();
 // ─── Helpers ────────────────────────────────────────────────────────────────
 public partial class Program
 {
+    /// <summary>
+    /// Return the C# parameter name and CLR type of the action's
+    /// <c>[FromBody]</c> bound argument, or <c>(null, null)</c> when the
+    /// action binds the body some other way. Used by the model-state
+    /// funnel for two purposes:
+    /// <list type="number">
+    ///   <item><b>Body-parameter recognition:</b> the action's body
+    ///   parameter (named <c>body</c> on every route in this API today)
+    ///   is treated as a "whole-request" key alongside the synthetic
+    ///   <c>""</c> / <c>"$"</c> / <c>"body"</c> / <c>"request"</c>
+    ///   spellings.</item>
+    ///   <item><b>Property collision carve-out:</b> when the body
+    ///   parameter's name is ALSO a real property on the parameter's CLR
+    ///   type (e.g. a future route binds <c>[FromBody] Model model</c>),
+    ///   the model-state funnel must NOT fold a synthetic
+    ///   <c>"$.model"</c> entry onto <c>"body"</c> — it is a real field
+    ///   error and the response must be <c>errors.model</c>. Step
+    ///   51-fix-3 added the carve-out for <c>LlmSettingsRequest.Model</c>,
+    ///   and the type lookup makes the carve-out work without hard-coding
+    ///   field names.</item>
+    /// </list>
+    /// </summary>
+    private static (string? Name, Type? Type) ResolveBodyParam(Microsoft.AspNetCore.Mvc.ActionContext ctx)
+    {
+        var desc = ctx.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor;
+        if (desc is null) return (null, null);
+
+        foreach (var p in desc.Parameters)
+        {
+            var bi = p.BindingInfo;
+            if (bi is null) continue;
+            if (bi.BindingSource == Microsoft.AspNetCore.Mvc.ModelBinding.BindingSource.Body)
+                return (p.Name, p.ParameterType);
+        }
+        return (null, null);
+    }
+
+
     /// <summary>
     /// (a) If the app tables exist (legacy <c>EnsureCreated()</c> bootstrap)
     /// but the <c>__ef_migrations</c> history table is missing or empty,

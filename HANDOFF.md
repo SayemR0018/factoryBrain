@@ -224,11 +224,14 @@ on the `whatsapp_sim` channel. Conversation transcripts live in
 
 ### 5.6 RAG (real `/api/ask`)
 
-The .NET 9 backend (`FactoryBrain.Api`) is the authoritative retrieval
-path for `/api/ask` since step 46. The Next.js frontend proxies `/api/*`
-to it (see `next.config.mjs`). The TypeScript services under
-`src/services/rag/*` are now a **legacy offline-only fallback** —
-preserved for offline tooling, not loaded by any live route.
+The .NET 9 backend (under `FactoryBrain.Backend/`, layered into
+`FactoryBrain.Domain`, `FactoryBrain.Application`,
+`FactoryBrain.Infrastructure`, and `FactoryBrain.Api`) is the
+authoritative retrieval path for `/api/ask` since step 46. The Next.js
+frontend proxies `/api/*` to it (see `next.config.mjs`). The TypeScript
+services under `src/services/rag/*` are now a **legacy offline-only
+fallback** — preserved for offline tooling, not loaded by any live
+route.
 
 **Providers** (resolved at runtime; first probe wins):
 - `local` — deterministic MD5-bucketed token-frequency embedder
@@ -286,9 +289,9 @@ then the default `http://localhost:5000`. Any trailing slash is
 stripped, and the resolved URL is printed once at startup. Exit code
 is non-zero on any failure or when the top-3 hit rate drops below 0.85.
 
-**Container image.** A multi-stage `FactoryBrain.Api/Dockerfile` ships
-with the repo; build it from the repo root with
-`docker build -f FactoryBrain.Api/Dockerfile -t factorybrain-api:dev .`
+**Container image.** A multi-stage `FactoryBrain.Backend/FactoryBrain.Api/Dockerfile`
+ships with the repo; build it from the repo root with
+`docker build -f FactoryBrain.Backend/FactoryBrain.Api/Dockerfile -t factorybrain-api:dev .`
 (no deploy steps here — that's what k8s/Compose is for).
 
 **Supabase.**

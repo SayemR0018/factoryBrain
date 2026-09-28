@@ -115,42 +115,64 @@ public sealed class RagService : IRagService
             }
         }
 
-        // Step 47: synonym expansion. The expanded query is what we feed to
-        // the scorer, so a query like `needle breakage` matches chunks that
-        // only say `সুই ভাঙা`. The expansion is logged at debug level so
-        // operators can see what the scorer is actually scoring against.
-        var effectiveQuery = RagSynonyms.ApplyToQuery(query);
-        if (!string.Equals(effectiveQuery, query, StringComparison.Ordinal))
-            _log.LogDebug("RagSynonyms expanded query: {Original} -> {Expanded}", query, effectiveQuery);
-
-        var (qBm25, qTf) = _scorer.TermFreq(effectiveQuery);
-
-        // Term sets for the two overlap checks we do below:
-        //   * qTf          — expanded-query tokens (used by BM25 scoring)
-        //   * originalTf   — tokens from the user's *original* query. The
-        //                     "at least one original-token overlap" gate
-        //                     is what protects us from synonym-only matches:
-        //                     a query like "zzqx purple volcano tax" has
-        //                     no overlap with any real chunk because none
-        //                     of its terms are real keys (the synonym
-        //                     expansion doesn't add anything either since
-        //                     none of the tokens are in RagSynonyms.Map).
-        var originalTf = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Step 48d: query-dependent keyword score.
+        //
+        // Build the per-token weight lookup the BM25 scorer will multiply
+        // into each term's contribution:
+        //   * tokens from the user's *original* query → weight 1.0
+        //   * tokens reachable through ONE level of RagSynonyms.ExpandToken
+        //     → weight RagSynonyms.SynonymWeight (0.7)
+        //   * tokens that already appear in the original set are
+        //     collapsed back to 1.0 (no double-counting)
+        //
+        // We intentionally do NOT chain synonym-of-synonym: the spec
+        // explicitly limits us to a single expansion. The output of
+        // RagSynonyms.ApplyToQuery is still logged so operators can see
+        // what the legacy string-rewrite path produced — the new scorer
+        // is independent of it and uses ExpandToken directly.
+        var originalTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var tok in HybridScorer.TokenizeForTest(query))
-            originalTf.Add(tok);
+            if (!string.IsNullOrEmpty(tok))
+                originalTokens.Add(tok);
 
-        // Pre-lowercase chunk text once for the overlap boost (the scorer
-        // already lower-cases, but TermFreq's tf is case-insensitive, while
-        // the literal overlap check below is not — keep them aligned).
+        var synTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in originalTokens)
+            foreach (var s in RagSynonyms.ExpandToken(t))
+                if (!string.IsNullOrEmpty(s) && !originalTokens.Contains(s))
+                    synTokens.Add(s);
+
+        var expandedQueryForLog = originalTokens.Count > 0 || synTokens.Count > 0
+            ? string.Join(' ', originalTokens.Concat(synTokens))
+            : "";
+        if (!string.IsNullOrEmpty(expandedQueryForLog) &&
+            !string.Equals(expandedQueryForLog, query, StringComparison.Ordinal))
+        {
+            _log.LogDebug("RagSynonyms scoring expansion: {Original} -> {Expanded}", query, expandedQueryForLog);
+        }
+
+        var tokenWeight = new RagTokenWeight(originalTokens, synTokens);
+
+        // Run the corpus-aware BM25 in one pass over all chunks. The
+        // scorer is query-dependent — every chunk that shares zero
+        // weighted terms with the query gets Norm = 0.
+        var candidateTuples = chunks
+            .Select(c => (c.Id, c.Text))
+            .ToList();
+        var kwScores = _scorer.ScoreChunksForQuery(query, candidateTuples, tokenWeight)
+            .ToDictionary(s => s.ChunkId, s => s.Norm, StringComparer.Ordinal);
+
+        // Pre-lowercase each chunk once for the synonym-aware overlap
+        // check below. TermFreq isn't used any more (the BM25 above is
+        // the source of truth for the keyword side), so we no longer
+        // need its tf map.
         var chunkTextLower = chunks.ToDictionary(c => c.Id, c => c.Text.ToLowerInvariant());
 
         var ranked = chunks.Select(c =>
         {
             // Null embedding = chunk was ingested in degraded mode or its
             // embed call failed mid-batch. The dense score is skipped for
-            // these rows; BM25 + the term-overlap boost still rank them so
-            // the user-visible hit list stays useful until reindex fills
-            // them in.
+            // these rows; the BM25 side still ranks them so the user-
+            // visible hit list stays useful until reindex fills them in.
             float[]? cVec = c.Embedding is null
                 ? null
                 : (float[])c.Embedding.ToArray();
@@ -159,43 +181,54 @@ public sealed class RagService : IRagService
             {
                 cos = _scorer.Cosine(qVec, cVec);
             }
-            var (bm, _) = _scorer.TermFreq(c.Text);
-            int overlap = 0;
-            int originalOverlap = 0;
+            double bm25Norm = kwScores.TryGetValue(c.Id, out var n) ? n : 0;
+
+            // Synonym-aware overlap gate: a chunk passes if the chunk's
+            // text contains at least one token from the original query OR
+            // one synonym of an original query token. The check is purely
+            // query-dependent (no chunk-side base score). Synonym chains
+            // never extend past one level — we only check `originalTokens`
+            // and the single-hop `synTokens` set.
             var cText = chunkTextLower[c.Id];
-            foreach (var k in qTf.Keys)
-                if (cText.Contains(k, StringComparison.Ordinal)) overlap++;
-            foreach (var k in originalTf)
-                if (cText.Contains(k, StringComparison.Ordinal)) originalOverlap++;
-            double bm25Combined = (bm + 0.1 * overlap) / 1.1;
+            bool matchOriginal = false;
+            foreach (var k in originalTokens)
+                if (cText.Contains(k, StringComparison.Ordinal)) { matchOriginal = true; break; }
+            bool matchSyn = false;
+            if (!matchOriginal)
+            {
+                foreach (var k in synTokens)
+                    if (cText.Contains(k, StringComparison.Ordinal)) { matchSyn = true; break; }
+            }
+
             // Use the *provider-mix* BM25 weight for the hybrid combine.
             // Caller-provided bm25Weight is retained as a legacy fallback
             // for callers that don't yet route through RagConfig.
-            double weight = (envBm25 is not null || envVec is not null)
-                ? Math.Clamp(providerBm25W, 0, 1)
-                : Math.Clamp(providerBm25W, 0, 1);
+            double weight = Math.Clamp(providerBm25W, 0, 1);
             if (bm25Weight > 0 && bm25Weight != 0.35) // legacy caller explicitly set a non-default weight
                 weight = Math.Clamp(bm25Weight, 0, 1);
-            double hybrid = _scorer.Hybrid(bm25Combined, cos, weight);
-            return new { c, cos, bm25 = bm25Combined, hybrid, originalOverlap };
+            double hybrid = _scorer.Hybrid(bm25Norm, cos, weight);
+            return new { c, cos, bm25 = bm25Norm, hybrid, matchOriginal, matchSyn };
         })
-        // Step 47 RAG_MIN_SCORE cutoff.
+        // Step 47 RAG_MIN_SCORE cutoff (kept by 48d).
         //
         // In degraded mode the dense score is 0 for every chunk, so the
-        // hybrid score collapses to bm25Weight * bm25. If we used the
-        // hybrid score here, every chunk would score 0.30 * bm25 — which
-        // for the demo seed is below the 0.10 cutoff and the user would
-        // get nothing back for a perfectly valid keyword query. Evaluating
-        // BM25 alone keeps keyword hits in the answer. (See 47add.txt.)
+        // hybrid score collapses to bm25Weight * bm25. Evaluating BM25
+        // alone (bm25Norm, already 0-1 normalised) keeps keyword hits in
+        // the answer. The norm-1 top hit at MinScore=0.10 needs
+        // bm25Weight=0.10 minimum in degraded mode — the RagConfig
+        // already accounts for this (LocalBm25Weight in degraded mode is
+        // high enough that bm25Norm clears MinScore for legit hits).
         .Where(r => degraded
             ? r.bm25 >= cfg.MinScore
             : r.hybrid >= cfg.MinScore)
-        // Original-token-overlap gate: a chunk must share at least one
-        // token with the user's original query. Synonym expansions are
-        // an extra, not a replacement — "zzqx purple volcano tax" must
-        // not surface hits just because the expansion adds words that
-        // happen to be in the corpus.
-        .Where(r => r.originalOverlap >= 1 || originalTf.Count == 0)
+        // Synonym-aware overlap gate (Step 48d): a chunk must share at
+        // least one token with the user's original query OR with one of
+        // its one-level synonyms. A query whose tokens match nothing —
+        // directly or through a synonym — returns no hits and AskService
+        // converts that into the fixed "no confident source" payload,
+        // which is the existing citeCount = 0 contract for nonsense
+        // queries ("zzqx purple volcano tax" / "ফ্লারবার্গ ব্লুমেনভাল্ট").
+        .Where(r => r.matchOriginal || r.matchSyn || originalTokens.Count == 0)
         // Honour legacy similarity-threshold parameter alongside MinScore.
         .Where(r => r.hybrid >= similarityThreshold)
         .OrderByDescending(r => r.hybrid)
@@ -224,6 +257,36 @@ public sealed class RagService : IRagService
             System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture,
             out var d) ? d : null;
+    }
+
+    /// <summary>
+    /// <see cref="HybridScorer.ITokenWeight"/> implementation that knows
+    /// about the two-tier synonym weights used in <see cref="RetrieveAsync"/>:
+    /// original query tokens score at 1.0; one-level synonym expansions of
+    /// those tokens score at <see cref="RagSynonyms.SynonymWeight"/>.
+    /// Tokens not in either set score at 1.0 if they match a literal query
+    /// term (defensive — the scorer only receives tokens we already
+    /// passed, so this branch is unreachable in practice).
+    /// Step 48d.
+    /// </summary>
+    private sealed class RagTokenWeight : HybridScorer.ITokenWeight
+    {
+        private readonly HashSet<string> _originals;
+        private readonly HashSet<string> _synonyms;
+
+        public RagTokenWeight(HashSet<string> originals, HashSet<string> synonyms)
+        {
+            _originals = originals;
+            _synonyms  = synonyms;
+        }
+
+        public double WeightOf(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return 0;
+            if (_originals.Contains(token)) return 1.0;
+            if (_synonyms.Contains(token))  return RagSynonyms.SynonymWeight;
+            return 0;
+        }
     }
 
     /// <summary>

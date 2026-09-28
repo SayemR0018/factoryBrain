@@ -15,6 +15,16 @@ namespace FactoryBrain.Api.Services.Rag;
 /// marks fold into their base character. Tokens are no longer dropped when
 /// their only character is a single Bangla codepoint.
 /// </para>
+///
+/// <para>
+/// Step 48d added an IDF-aware, length-normalised BM25 scorer
+/// (<see cref="ScoreChunksForQuery"/>) that replaces the prior
+/// per-chunk term-frequency heuristic. The new scorer is query-dependent
+/// (only tokens present in the query contribute), uses corpus-level
+/// document frequency, and applies BM25 length normalisation. Per-query
+/// normalisation lifts the top hit to 1.0 so the keyword component mixes
+/// cleanly with the dense cosine score in <see cref="Hybrid"/>.
+/// </para>
 /// </summary>
 public sealed class HybridScorer
 {
@@ -93,6 +103,126 @@ public sealed class HybridScorer
         foreach (var token in Tokenise(normalised))
             if (!string.IsNullOrEmpty(token))
                 yield return token;
+    }
+
+    /// <summary>Per-chunk BM25 result. <c>Raw</c> is pre-normalisation,
+    /// <c>Norm</c> is normalised so the top hit = 1.0 and a chunk that
+    /// matches no query term scores 0.</summary>
+    public readonly record struct ChunkKeywordScore(string ChunkId, double Raw, double Norm);
+
+    /// <summary>
+    /// Resolves the per-token weight that the BM25 accumulator multiplies
+    /// into the score. Step 48d: original query tokens get 1.0, one-level
+    /// synonym expansions get <see cref="RagSynonyms.SynonymWeight"/>.
+    /// </summary>
+    public interface ITokenWeight
+    {
+        /// <summary>Weight to apply when scoring this token against a
+        /// chunk. Return 0 to drop the token from the query set entirely
+        /// (rare — typically used to filter noise).</summary>
+        double WeightOf(string token);
+    }
+
+    /// <summary>
+    /// Scores each chunk against the user's query using BM25 (Robertson +
+    /// Walker / Zaragoza et al.) with corpus-level IDF and BM25 length
+    /// normalisation, then divides every chunk's raw score by the corpus
+    /// max so the top hit lands at 1.0. Scoring is purely
+    /// <em>query-dependent</em>: chunks that share zero query terms (per
+    /// <paramref name="tokenWeight"/>) get 0. No per-chunk base score is
+    /// added.
+    /// </summary>
+    /// <param name="query">User query — tokenised the same way chunks are.</param>
+    /// <param name="chunks">Candidate chunks to rank.</param>
+    /// <param name="tokenWeight">Per-token scoring weights. E.g.
+    /// <c>1.0</c> for originals and <see cref="RagSynonyms.SynonymWeight"/>
+    /// for one-level synonyms.</param>
+    /// <param name="k1">BM25 saturation. Classic value 1.5.</param>
+    /// <param name="b">BM25 length normalisation. Classic value 0.75.</param>
+    public IReadOnlyList<ChunkKeywordScore> ScoreChunksForQuery(
+        string query,
+        IReadOnlyList<(string Id, string Text)> chunks,
+        ITokenWeight tokenWeight,
+        double k1 = 1.5,
+        double b  = 0.75)
+    {
+        if (chunks is null || chunks.Count == 0) return Array.Empty<ChunkKeywordScore>();
+        if (tokenWeight is null) throw new ArgumentNullException(nameof(tokenWeight));
+
+        // ---- 1. Tokenise query + chunks uniformly. -------------------
+        // We collect (i) the deduped, weighted query-term list and (ii) per-
+        // chunk TF maps + lengths. The tokeniser is FormKC, lower-case,
+        // and the same Splitter set as everything else in this file.
+        var queryTokens = TokenizeForTest(query ?? string.Empty)
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var weights = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in queryTokens)
+        {
+            var w = tokenWeight.WeightOf(t);
+            if (w > 0) weights[t] = w;
+        }
+
+        var chunkTfList = new Dictionary<string, int>[chunks.Count];
+        var chunkLens   = new int[chunks.Count];
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            var tf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in TokenizeForTest(chunks[i].Text ?? string.Empty))
+            {
+                if (string.IsNullOrEmpty(t)) continue;
+                tf[t] = tf.TryGetValue(t, out var c) ? c + 1 : 1;
+            }
+            chunkTfList[i] = tf;
+            chunkLens[i]   = tf.Values.Sum();
+        }
+
+        // ---- 2. Compute corpus stats once over the chunk set. --------
+        int N      = chunks.Count;
+        double sum = 0;
+        for (int i = 0; i < chunkLens.Length; i++) sum += chunkLens[i];
+        double avgDl = N == 0 ? 0 : sum / N;
+        var df = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in weights.Keys)
+        {
+            int hits = 0;
+            for (int i = 0; i < chunkTfList.Length; i++)
+                if (chunkTfList[i].TryGetValue(t, out var c) && c > 0) hits++;
+            if (hits > 0) df[t] = hits;
+        }
+
+        // ---- 3. Score each chunk. ------------------------------------
+        var raws = new double[chunks.Count];
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            double s = 0;
+            var tf = chunkTfList[i];
+            int dl = chunkLens[i];
+            foreach (var (term, w) in weights)
+            {
+                if (!df.TryGetValue(term, out var dft) || dft == 0) continue;
+                if (!tf.TryGetValue(term, out var f) || f == 0) continue;
+                // BM25+ IDF with Laplace smoothing (the +1 inside log is
+                // the canonical Robertson–Sparck Jones modification).
+                double idf = Math.Log(((N - dft + 0.5) / (dft + 0.5)) + 1.0);
+                double denom = f + k1 * (1.0 - b + b * dl / (avgDl <= 0 ? 1.0 : avgDl));
+                double tfNorm = f * (k1 + 1.0) / denom;
+                s += w * idf * tfNorm;
+            }
+            raws[i] = s;
+        }
+
+        // ---- 4. Per-query normalisation. -----------------------------
+        double maxRaw = 0;
+        for (int i = 0; i < raws.Length; i++) if (raws[i] > maxRaw) maxRaw = raws[i];
+        var norm = new ChunkKeywordScore[chunks.Count];
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            double n = maxRaw > 0 ? raws[i] / maxRaw : 0;
+            norm[i] = new ChunkKeywordScore(chunks[i].Id, raws[i], n);
+        }
+        return norm;
     }
 
     private static IEnumerable<string> Tokenise(string text)

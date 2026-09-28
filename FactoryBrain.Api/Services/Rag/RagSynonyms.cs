@@ -66,6 +66,15 @@ public static class RagSynonyms
     public const int MaxExpansionTokens = 50;
 
     /// <summary>
+    /// Weight applied to keyword-score contributions that arrived through
+    /// a one-level synonym expansion. Synonym hits are real evidence, but
+    /// they're noisier than literal matches (e.g. "fire" is a synonym of
+    /// both "অগ্নি" and "আগুন" but is more general), so we scale them
+    /// below 1.0 inside the BM25 accumulator. Step 48d.
+    /// </summary>
+    public const double SynonymWeight = 0.7;
+
+    /// <summary>
     /// Returns the input query with each recognised key's expansions
     /// appended (space-separated). Acronyms whose expansions are missing
     /// or empty are skipped. The original query text is preserved verbatim
@@ -121,6 +130,23 @@ public static class RagSynonyms
             foreach (var kv in Map)
                 foreach (var alias in kv.Value)
                     yield return (kv.Key, alias);
+        }
+    }
+
+    /// <summary>
+    /// Returns the one-level synonym expansion of <paramref name="token"/>.
+    /// Yields nothing for tokens that are not in <see cref="Map"/> or whose
+    /// entry is empty. Expansion is single-hop by design: the caller is
+    /// responsible for not chaining further. Step 48d.
+    /// </summary>
+    public static IEnumerable<string> ExpandToken(string token)
+    {
+        if (string.IsNullOrEmpty(token)) yield break;
+        if (!Map.TryGetValue(token, out var expansions) || expansions is null) yield break;
+        foreach (var e in expansions)
+        {
+            if (string.IsNullOrWhiteSpace(e)) continue;
+            yield return e;
         }
     }
 }

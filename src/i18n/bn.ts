@@ -436,6 +436,7 @@ export const bn: Dict = {
     llmClearCancel: "কী রাখুন",
     llmSavedToast: "এলএলএম সেটিংস সংরক্ষিত হয়েছে",
     llmClearedToast: "API কী মুছে ফেলা হয়েছে",
+    llmAdminTokenError: "সার্ভারে অ্যাডমিন টোকেন অনুপস্থিত বা অবৈধ",
     llmDemoChip: "ডেমো মোড",
     llmLiveChip: "লাইভ মোড",
     llmProviderPersistence: "উৎস",

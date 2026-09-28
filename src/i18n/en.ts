@@ -437,6 +437,7 @@ export const en = {
     llmClearCancel: "Keep key",
     llmSavedToast: "LLM settings saved",
     llmClearedToast: "API key cleared",
+    llmAdminTokenError: "Admin token missing or invalid on the server",
     llmDemoChip: "Demo mode",
     llmLiveChip: "Live mode",
     llmProviderPersistence: "Source",

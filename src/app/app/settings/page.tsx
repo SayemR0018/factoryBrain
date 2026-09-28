@@ -590,6 +590,14 @@ function LlmPanel() {
       });
       const data = (await res.json()) as Partial<LlmStatus> & { notice?: string; error?: string };
       if (!res.ok) {
+        // 401/403 means the server-side ADMIN_API_TOKEN gate refused the
+        // request — the .NET API is reachable but the secret header is
+        // missing or wrong. Show a clear, unambiguous message so the
+        // operator can fix the env var instead of seeing a silent failure.
+        if (res.status === 401 || res.status === 403) {
+          setNotice(t("settings.llmAdminTokenError") as string);
+          return;
+        }
         setNotice(t("settings.llmSavedToast") + " — " + (data.error ?? "failed"));
         return;
       }
@@ -619,6 +627,13 @@ function LlmPanel() {
       });
       const data = (await res.json()) as Partial<LlmStatus> & { notice?: string; error?: string };
       if (!res.ok) {
+        // Same 401/403 clear-and-tell behaviour as handleSave — when the
+        // admin token gate refuses the call we surface the explicit
+        // configuration error instead of a generic "failed".
+        if (res.status === 401 || res.status === 403) {
+          setNotice(t("settings.llmAdminTokenError") as string);
+          return;
+        }
         setNotice(t("settings.llmClearedToast") + " — " + (data.error ?? "failed"));
         return;
       }
@@ -808,7 +823,18 @@ function LlmPanel() {
         </div>
 
         {notice && (
-          <p className="text-caption text-fg-secondary">{notice}</p>
+          <p
+            role="status"
+            aria-live="polite"
+            className={cn(
+              "text-caption",
+              notice === t("settings.llmAdminTokenError")
+                ? "text-risk-high"
+                : "text-fg-secondary"
+            )}
+          >
+            {notice}
+          </p>
         )}
       </form>
 

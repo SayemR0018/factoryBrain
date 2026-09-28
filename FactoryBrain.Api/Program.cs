@@ -322,6 +322,7 @@ using (var scope = app.Services.CreateScope())
 // ─── Middleware pipeline ───────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionMiddleware>();   // 1. JSON error envelope
 app.UseMiddleware<NoStoreMiddleware>();           // 2. Cache-Control: no-store on /api/* GETs
+app.UseMiddleware<AdminTokenMiddleware>();        // 3. Admin-token gate on the three write routes (non-Development)
 
 if (app.Environment.IsDevelopment())
 {

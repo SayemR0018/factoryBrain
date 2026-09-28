@@ -286,6 +286,11 @@ then the default `http://localhost:5000`. Any trailing slash is
 stripped, and the resolved URL is printed once at startup. Exit code
 is non-zero on any failure or when the top-3 hit rate drops below 0.85.
 
+**Container image.** A multi-stage `FactoryBrain.Api/Dockerfile` ships
+with the repo; build it from the repo root with
+`docker build -f FactoryBrain.Api/Dockerfile -t factorybrain-api:dev .`
+(no deploy steps here — that's what k8s/Compose is for).
+
 ---
 
 ## 6. Where to start tomorrow

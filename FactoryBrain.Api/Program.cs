@@ -122,6 +122,13 @@ builder.Services.AddDbContext<FactoryBrainDbContext>(opts =>
 // ─── FluentValidation (assembly scan) ──────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+// ─── Admin-token gate (bound to the three write actions via [AdminToken]) ──
+// Replaces the old path-matching middleware: the filter is invoked only on
+// actions that carry [AdminToken], so URL/path spellings (trailing slash,
+// mixed case, double slash, percent-encoded slash) either match the route
+// or they don't — the filter never gets a chance to mis-handle them.
+builder.Services.AddScoped<AdminTokenAuthorizationFilter>();
+
 // ─── RAG tuning config (Rag: section in appsettings.json, env Rag__*) ──────
 builder.Services.Configure<RagConfig>(builder.Configuration.GetSection("Rag"));
 
@@ -322,7 +329,6 @@ using (var scope = app.Services.CreateScope())
 // ─── Middleware pipeline ───────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionMiddleware>();   // 1. JSON error envelope
 app.UseMiddleware<NoStoreMiddleware>();           // 2. Cache-Control: no-store on /api/* GETs
-app.UseMiddleware<AdminTokenMiddleware>();        // 3. Admin-token gate on the three write routes (non-Development)
 
 if (app.Environment.IsDevelopment())
 {

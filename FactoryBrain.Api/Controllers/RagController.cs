@@ -1,5 +1,6 @@
 using FactoryBrain.Api.Data;
 using FactoryBrain.Api.Dtos.Rag;
+using FactoryBrain.Api.Middleware;
 using FactoryBrain.Api.Services.Interfaces;
 using FactoryBrain.Api.Services.Rag;
 using FluentValidation;
@@ -82,6 +83,7 @@ public class RagController : ControllerBase
     /// <c>409</c> is returned and the DB is never written.
     /// </summary>
     [HttpPost("reindex")]
+    [AdminToken]
     public async Task<IActionResult> Reindex(CancellationToken ct)
     {
         _log.LogInformation("Manual reindex requested via /api/rag/reindex");
@@ -170,6 +172,7 @@ public class RagController : ControllerBase
     /// </para>
     /// </summary>
     [HttpPost("ingest")]
+    [AdminToken]
     public async Task<IActionResult> Ingest([FromBody] RagIngestRequest body, CancellationToken ct)
     {
         var validation = await _ingestValidator.ValidateAsync(body ?? new RagIngestRequest("", null, "", null, "", null), ct);

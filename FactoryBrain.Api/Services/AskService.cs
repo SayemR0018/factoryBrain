@@ -346,15 +346,24 @@ public sealed class AskService : IAskService
 
     private static string ExtractAnthropicErrorCode(string body)
     {
+        // Spec (48h): log only the HTTP status, error type and error code —
+        // never error.message or the response body. Anthropic's error
+        // envelope puts the user-facing human message in `error.message`,
+        // which can contain secrets, internal trace details, or whatever
+        // the operator typed. The structured code lives in `error.type` /
+        // `error.code`, which is what the operator actually wants to see.
         try
         {
             using var d = System.Text.Json.JsonDocument.Parse(body);
             if (d.RootElement.TryGetProperty("error", out var err)
                 && err.ValueKind == System.Text.Json.JsonValueKind.Object
-                && err.TryGetProperty("message", out var m))
-                return m.GetString() ?? "unknown";
-            if (d.RootElement.TryGetProperty("type", out var t2))
-                return t2.GetString() ?? "unknown";
+                && err.TryGetProperty("code", out var c))
+            {
+                if (c.ValueKind == System.Text.Json.JsonValueKind.String) return c.GetString() ?? "unknown";
+                if (c.ValueKind == System.Text.Json.JsonValueKind.Number) return c.GetRawText();
+            }
+            if (err.TryGetProperty("type", out var t))
+                return t.GetString() ?? "unknown";
         }
         catch { }
         return "unknown";

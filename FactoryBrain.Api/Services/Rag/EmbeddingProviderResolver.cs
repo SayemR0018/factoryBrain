@@ -98,6 +98,15 @@ public sealed class EmbeddingProviderResolver
     private long _lastProbeTicks; // 0 = no probe yet
     private long _lastProbeOk;    // 1 = ok, 0 = fail
 
+    // Spec (48h): the "stub embedding outside Development, treated as
+    // local" warning is process-wide — the operator should see it
+    // exactly once even if Resolve() / ReResolve() / Probe() all hit
+    // ResolveCore() multiple times in the same lifetime. The flag is
+    // process-wide (static) so a second resolver instance (tests, hot
+    // reload) still respects "once".
+    private static int _stubWarned; // 0 = not yet, 1 = already logged
+
+
     public EmbeddingProviderResolver(
         IConfiguration cfg,
         IWebHostEnvironment env,
@@ -338,12 +347,17 @@ public sealed class EmbeddingProviderResolver
         //     for the local hash embedder so an operator who set
         //     RAG_EMBEDDING_PROVIDER=stub in Production still gets a
         //     working system. One warning is logged below so the
-        //     downgrade is visible in the startup log.
+        //     downgrade is visible in the startup log — but only ONCE
+        //     per process (ResolveCore can be hit multiple times by
+        //     ReResolve() / ProbeAsync() in a single lifetime).
         if (provider == "stub" && !_env.IsDevelopment())
         {
-            _log.LogWarning(
-                "RAG_EMBEDDING_PROVIDER=stub ignored outside Development (ASPNETCORE_ENVIRONMENT={Env}); falling back to local hash embedder.",
-                _env.EnvironmentName);
+            if (Interlocked.Exchange(ref _stubWarned, 1) == 0)
+            {
+                _log.LogWarning(
+                    "RAG_EMBEDDING_PROVIDER=stub ignored outside Development (ASPNETCORE_ENVIRONMENT={Env}); falling back to local hash embedder.",
+                    _env.EnvironmentName);
+            }
             provider = DefaultProvider;
         }
 

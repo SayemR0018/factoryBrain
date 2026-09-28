@@ -2,8 +2,10 @@ using FactoryBrain.Api.Data;
 using FactoryBrain.Api.Domain.Entities;
 using FactoryBrain.Api.Dtos.Ask;
 using FactoryBrain.Api.Dtos.Rag;
+using FactoryBrain.Api.Configuration;
 using FactoryBrain.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Pgvector;
 
 namespace FactoryBrain.Api.Services.Rag;
@@ -17,6 +19,7 @@ public sealed class RagService : IRagService
     private readonly EmbeddingColumnAdmin _admin;
     private readonly EmbeddingProviderResolver _resolver;
     private readonly ILogger<RagService> _log;
+    private readonly IOptions<RagConfig> _ragCfg;
 
     public RagService(
         FactoryBrainDbContext db,
@@ -25,9 +28,11 @@ public sealed class RagService : IRagService
         HybridScorer scorer,
         EmbeddingColumnAdmin admin,
         EmbeddingProviderResolver resolver,
-        ILogger<RagService> log)
+        ILogger<RagService> log,
+        IOptions<RagConfig> ragCfg)
     {
-        _db = db; _chunker = chunker; _embed = embed; _scorer = scorer; _admin = admin; _resolver = resolver; _log = log;
+        _db = db; _chunker = chunker; _embed = embed; _scorer = scorer;
+        _admin = admin; _resolver = resolver; _log = log; _ragCfg = ragCfg;
     }
 
     public async Task<List<DocumentChunk>> ChunkAsync(
@@ -61,6 +66,20 @@ public sealed class RagService : IRagService
         double bm25Weight = 0.35, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<AskRagHit>();
+
+        var cfg = _ragCfg.Value;
+
+        // Step 47: read provider-mix weights from RagConfig, with an env-var
+        // override that an operator can flip in Development without a
+        // restart (EnvReloader re-reads RAG_HYBRID_* on every probe tick).
+        // The env vars take precedence over the appsettings defaults.
+        bool degraded = _resolver.IsDegraded;
+        double providerBm25W = degraded ? cfg.LocalBm25Weight : cfg.HostedBm25Weight;
+        double providerVecW  = degraded ? cfg.LocalVectorWeight : cfg.HostedVectorWeight;
+        var envBm25 = TryReadDouble("RAG_HYBRID_BM25_WEIGHT");
+        var envVec  = TryReadDouble("RAG_HYBRID_VECTOR_WEIGHT");
+        if (envBm25 is not null) providerBm25W = envBm25.Value;
+        if (envVec  is not null) providerVecW  = envVec.Value;
 
         var q = _db.DocumentChunks.AsNoTracking().AsQueryable();
         if (filter is { } f)
@@ -96,7 +115,34 @@ public sealed class RagService : IRagService
             }
         }
 
-        var (qBm25, qTf) = _scorer.TermFreq(query);
+        // Step 47: synonym expansion. The expanded query is what we feed to
+        // the scorer, so a query like `needle breakage` matches chunks that
+        // only say `সুই ভাঙা`. The expansion is logged at debug level so
+        // operators can see what the scorer is actually scoring against.
+        var effectiveQuery = RagSynonyms.ApplyToQuery(query);
+        if (!string.Equals(effectiveQuery, query, StringComparison.Ordinal))
+            _log.LogDebug("RagSynonyms expanded query: {Original} -> {Expanded}", query, effectiveQuery);
+
+        var (qBm25, qTf) = _scorer.TermFreq(effectiveQuery);
+
+        // Term sets for the two overlap checks we do below:
+        //   * qTf          — expanded-query tokens (used by BM25 scoring)
+        //   * originalTf   — tokens from the user's *original* query. The
+        //                     "at least one original-token overlap" gate
+        //                     is what protects us from synonym-only matches:
+        //                     a query like "zzqx purple volcano tax" has
+        //                     no overlap with any real chunk because none
+        //                     of its terms are real keys (the synonym
+        //                     expansion doesn't add anything either since
+        //                     none of the tokens are in RagSynonyms.Map).
+        var originalTf = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tok in HybridScorer.TokenizeForTest(query))
+            originalTf.Add(tok);
+
+        // Pre-lowercase chunk text once for the overlap boost (the scorer
+        // already lower-cases, but TermFreq's tf is case-insensitive, while
+        // the literal overlap check below is not — keep them aligned).
+        var chunkTextLower = chunks.ToDictionary(c => c.Id, c => c.Text.ToLowerInvariant());
 
         var ranked = chunks.Select(c =>
         {
@@ -115,15 +161,45 @@ public sealed class RagService : IRagService
             }
             var (bm, _) = _scorer.TermFreq(c.Text);
             int overlap = 0;
+            int originalOverlap = 0;
+            var cText = chunkTextLower[c.Id];
             foreach (var k in qTf.Keys)
-                if (c.Text.ToLowerInvariant().Contains(k)) overlap++;
+                if (cText.Contains(k, StringComparison.Ordinal)) overlap++;
+            foreach (var k in originalTf)
+                if (cText.Contains(k, StringComparison.Ordinal)) originalOverlap++;
             double bm25Combined = (bm + 0.1 * overlap) / 1.1;
-            double hybrid = _scorer.Hybrid(bm25Combined, cos, bm25Weight);
-            return new { c, cos, bm25 = bm25Combined, hybrid };
+            // Use the *provider-mix* BM25 weight for the hybrid combine.
+            // Caller-provided bm25Weight is retained as a legacy fallback
+            // for callers that don't yet route through RagConfig.
+            double weight = (envBm25 is not null || envVec is not null)
+                ? Math.Clamp(providerBm25W, 0, 1)
+                : Math.Clamp(providerBm25W, 0, 1);
+            if (bm25Weight > 0 && bm25Weight != 0.35) // legacy caller explicitly set a non-default weight
+                weight = Math.Clamp(bm25Weight, 0, 1);
+            double hybrid = _scorer.Hybrid(bm25Combined, cos, weight);
+            return new { c, cos, bm25 = bm25Combined, hybrid, originalOverlap };
         })
+        // Step 47 RAG_MIN_SCORE cutoff.
+        //
+        // In degraded mode the dense score is 0 for every chunk, so the
+        // hybrid score collapses to bm25Weight * bm25. If we used the
+        // hybrid score here, every chunk would score 0.30 * bm25 — which
+        // for the demo seed is below the 0.10 cutoff and the user would
+        // get nothing back for a perfectly valid keyword query. Evaluating
+        // BM25 alone keeps keyword hits in the answer. (See 47add.txt.)
+        .Where(r => degraded
+            ? r.bm25 >= cfg.MinScore
+            : r.hybrid >= cfg.MinScore)
+        // Original-token-overlap gate: a chunk must share at least one
+        // token with the user's original query. Synonym expansions are
+        // an extra, not a replacement — "zzqx purple volcano tax" must
+        // not surface hits just because the expansion adds words that
+        // happen to be in the corpus.
+        .Where(r => r.originalOverlap >= 1 || originalTf.Count == 0)
+        // Honour legacy similarity-threshold parameter alongside MinScore.
         .Where(r => r.hybrid >= similarityThreshold)
         .OrderByDescending(r => r.hybrid)
-        .Take(topK)
+        .Take(topK > 0 ? topK : cfg.TopK)
         .ToList();
 
         return ranked.Select(r => new AskRagHit(
@@ -138,6 +214,16 @@ public sealed class RagService : IRagService
             Math.Round(r.bm25, 4),
             r.c.Text.Length <= 240 ? r.c.Text : r.c.Text[..240]
         )).ToList();
+    }
+
+    private static double? TryReadDouble(string name)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return double.TryParse(raw,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var d) ? d : null;
     }
 
     /// <summary>

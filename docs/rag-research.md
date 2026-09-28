@@ -336,6 +336,12 @@ section 5 above).
   rows from `manual_documents` and re-ingest them via `POST /api/rag/ingest`.
   `POST /api/rag/reindex` only re-embeds the chunks it finds and never
   re-splits the text.
+- The Next.js RAG services under `src/services/rag/*` are now a legacy
+  offline-only fallback. The ASP.NET Core pipeline
+  (`FactoryBrain.Api/Services/Rag/*`) is the authoritative `/api/ask`
+  retrieval path. The TypeScript files are preserved for offline tooling
+  and local demos; no live route imports them. Header banners in each
+  file document the same.
 - On a fresh database with a non-local provider, the 8 base seed documents
   are stamped local/384 and aren't realigned until the next reindex,
   though pendingCount flags them.

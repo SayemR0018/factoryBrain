@@ -43,6 +43,7 @@ using FactoryBrain.Api.Middleware;
 using FactoryBrain.Api.Services;
 using FactoryBrain.Api.Services.Interfaces;
 using FactoryBrain.Api.Services.Rag;
+using FactoryBrain.Api.Configuration;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -120,6 +121,9 @@ builder.Services.AddDbContext<FactoryBrainDbContext>(opts =>
 
 // ─── FluentValidation (assembly scan) ──────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+// ─── RAG tuning config (Rag: section in appsettings.json, env Rag__*) ──────
+builder.Services.Configure<RagConfig>(builder.Configuration.GetSection("Rag"));
 
 // ─── RAG: pluggable embedder + chunker + scorer ────────────────────────────
 // The resolver is a singleton; the actual IEmbeddingService is built once at

@@ -33,6 +33,17 @@ public sealed class AskService : IAskService
 
         var ragHits = await _rag.RetrieveAsync(req.Query, req.Filter, topK: 4, ct: ct);
 
+        // Step 47 (47add.txt): when the RAG service has no confident source
+        // for the query, skip the LLM entirely and surface a fixed EN/BN
+        // "no confident source was found" message. We must NOT feed an
+        // empty context to the model — every model hallucinates
+        // something, and the user sees that hallucination as an answer.
+        if (ragHits.Count == 0)
+        {
+            _log.LogInformation("LLM skipped: no confident sources for query={Query}", req.Query);
+            return NoConfidentSourceAsync(req);
+        }
+
         if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(apiKey))
         {
             try
@@ -47,6 +58,50 @@ public sealed class AskService : IAskService
         }
         return DemoAsync(req, ragHits, null, ct);
     }
+
+    /// <summary>
+    /// Fixed-shape answer for "no confident source found". Citations are
+    /// empty (per brief: never invent a citation). The fixed EN/BN
+    /// strings are not interpolated with the user query — that would be a
+    /// surface that downstream templates might treat as a hit.
+    /// </summary>
+    private static AskAnswerResponse NoConfidentSourceAsync(AskRequest req)
+    {
+        return new AskAnswerResponse(
+            TaskId: $"ask-{Guid.NewGuid():N}",
+            Analyzed: Array.Empty<AskAnalyzedDomain>(),
+            Finding: "No confident source was found for your query.",
+            FindingBn: "আপনার প্রশ্নের জন্য কোনো নির্ভরযোগ্য উৎস পাওয়া যায়নি।",
+            Factors: Array.Empty<AskFactor>(),
+            Evidence: new List<EvidenceRefDto>(),
+            Citations: new List<CitationDto>(),
+            Recommendation: new AskRecommendation(
+                "Try rephrasing or broadening the query",
+                "প্রশ্নটি পুনর্বিন্যাস বা প্রসারিত করুন",
+                "Use one or two keywords, or check the manuals page directly.",
+                "এক বা দুটি কীওয়ার্ড ব্যবহার করুন, অথবা সরাসরি ম্যানুয়াল পেজ দেখুন।",
+                "low"),
+            CreatedAt: DateTime.UtcNow,
+            Confidence: 0.0,
+            RagHits: Array.Empty<AskRagHit>());
+    }
+
+    /// <summary>
+    /// Step 47: project an <see cref="ReadOnlyCollection{AskRagHit}"/> onto
+    /// the new <see cref="CitationDto"/> shape with id, title, snippet,
+    /// confidence (hybrid score clamped to [0,1]), source, and url. The
+    /// URL is empty for now because the per-chunk URL is not stored on the
+    /// chunk row — a future step can join through <c>ManualDocument.Url</c>.
+    /// </summary>
+    private static IReadOnlyList<CitationDto> BuildCitations(IReadOnlyList<AskRagHit> hits)
+        => hits.Select(h => new CitationDto(
+            Id: h.Id,
+            Title: h.Title,
+            Snippet: h.Snippet,
+            Confidence: Math.Clamp(h.HybridScore, 0.0, 1.0),
+            Source: "rag",
+            Url: string.Empty
+        )).ToList();
 
     private AskAnswerResponse DemoAsync(AskRequest req, IReadOnlyList<AskRagHit> hits, string? warning, CancellationToken ct)
     {
@@ -75,6 +130,7 @@ public sealed class AskService : IAskService
             FindingBn: $"ডেমো উত্তর: {req.Query}",
             Factors: factors,
             Evidence: evidence,
+            Citations: BuildCitations(hits),
             Recommendation: rec,
             CreatedAt: DateTime.UtcNow,
             Confidence: 0.7,
@@ -119,6 +175,7 @@ public sealed class AskService : IAskService
             FindingBn: finding,
             Factors: new List<AskFactor>(),
             Evidence: new List<EvidenceRefDto>(),
+            Citations: BuildCitations(hits),
             Recommendation: new AskRecommendation("Review the raw answer", "কাঁচা উত্তর পর্যালোচনা", raw.Length > 240 ? raw[..240] : raw, raw.Length > 240 ? raw[..240] : raw, "low"),
             CreatedAt: DateTime.UtcNow,
             Confidence: 0.65,

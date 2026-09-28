@@ -12,6 +12,14 @@ public record AskAnswerResponse(
     string FindingBn,
     IReadOnlyList<AskFactor> Factors,
     IReadOnlyList<EvidenceRefDto> Evidence,
+    /// <summary>
+    /// Step 47: per-hit citation parity with the brief's
+    /// <c>{id, title, snippet, confidence, source, url}</c> shape.
+    /// <c>Confidence</c> is the hybrid score clamped to <c>[0,1]</c>.
+    /// <c>Url</c> is empty today — the parent <c>ManualDocument.Url</c> is
+    /// not propagated through to chunk-level hits yet.
+    /// </summary>
+    IReadOnlyList<CitationDto> Citations,
     AskRecommendation Recommendation,
     DateTime CreatedAt,
     double Confidence,
@@ -48,3 +56,18 @@ public record EvidenceRefDto(
     Dictionary<string, string>? Filter,
     IReadOnlyList<string>? PreviewIds
 );
+
+/// <summary>
+/// Step 47: per-citation entry that exposes the exact six fields the
+/// <c>EvidenceBlock.tsx</c> brief expects (id, title, snippet, confidence,
+/// source, url). Empty when no confident source was found.
+/// </summary>
+public record CitationDto(
+    string Id,
+    string Title,
+    string Snippet,
+    double Confidence,
+    string Source,
+    string Url
+);
+

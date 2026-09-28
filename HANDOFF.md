@@ -291,6 +291,25 @@ with the repo; build it from the repo root with
 `docker build -f FactoryBrain.Api/Dockerfile -t factorybrain-api:dev .`
 (no deploy steps here — that's what k8s/Compose is for).
 
+**Supabase.**
+- *Used today:* only `FACTORYBRAIN_DB`. The API connects to Postgres
+  directly, and migrations run at startup. Use the **Session pooler**
+  connection string from Supabase Connect. The host ends in
+  `pooler.supabase.com`, it uses port 5432, and the username is
+  `postgres.<project-ref>`. It works over IPv4, which most free
+  container hosts need. Run `CREATE EXTENSION IF NOT EXISTS vector;`
+  once on the database.
+- The *direct* connection (`db.<project-ref>.supabase.co:5432`) is
+  IPv6-only on the Free plan. Use it only if the host supports IPv6.
+  Never use port 6543 (the transaction pooler).
+- *Not used yet:* `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`. No Supabase client library is
+  installed, so they matter only once a feature uses Supabase from the
+  frontend.
+- *Safety:* never commit real values, and never expose the `service_role`
+  key or the DB password through `NEXT_PUBLIC_*` — anything prefixed
+  `NEXT_PUBLIC_` ships to every browser that loads the page.
+
 ---
 
 ## 6. Where to start tomorrow

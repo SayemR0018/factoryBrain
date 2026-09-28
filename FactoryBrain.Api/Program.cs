@@ -367,10 +367,11 @@ app.MapGet("/", () => Results.Ok(new
     }
 }));
 
-// ─── Listen on http://localhost:5000 (and https://localhost:5001 if cert exists) ─
-app.Urls.Add("http://localhost:5000");
-app.Urls.Add("https://localhost:5001");
-
+// ─── Listen ────────────────────────────────────────────────────────────────
+// In Development, appsettings.Development.json supplies Urls (the
+// Next.js dev proxy expects http://localhost:5000). In Production and
+// every other environment, ASPNETCORE_URLS / launchSettings / the host's
+// settings take effect — no URL is hard-coded here.
 app.Run();
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -426,6 +426,15 @@ public sealed class RagService : IRagService
                 try
                 {
                     vec = _embed.Embed($"{input.Title} {pieces[i]}");
+                    // Dimension guard: a freshly-computed vector whose
+                    // length disagrees with the live column dim is
+                    // dropped (chunk stored with Embedding=null, row
+                    // stamped "pending"); a future reindex will fill it in.
+                    vec = _admin.GuardVectorDims(vec, doc);
+                    if (vec is null)
+                    {
+                        warning ??= "embedding dimension mismatch; chunks stored as pending until next reindex";
+                    }
                 }
                 catch (Exception ex)
                 {

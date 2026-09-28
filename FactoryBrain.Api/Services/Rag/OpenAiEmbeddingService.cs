@@ -55,12 +55,15 @@ public sealed class OpenAiEmbeddingService : HostedEmbeddingServiceBase
         var raw = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
         {
-            var sanitized = Redact(raw);
-            Logger.LogWarning("OpenAI embeddings call failed: status={Status} body={Body}",
-                (int)resp.StatusCode, sanitized);
-            // The exception message uses the redacted body so it never
-            // echoes the API key through LogWarning(ex, ...) on the way up.
-            throw new HttpRequestException($"openai-embed {(int)resp.StatusCode}: {sanitized}");
+            // Spec (48f): log only the HTTP status and the provider's
+            // error type / code. Never log the response body, and
+            // never log any key fragment.
+            Logger.LogWarning(
+                "OpenAI embeddings call failed: status={Status} providerErrorType={ErrorType} providerErrorCode={ErrorCode}.",
+                (int)resp.StatusCode,
+                ExtractErrorType(raw),
+                ExtractErrorCode(raw));
+            throw new HttpRequestException($"openai-embed {(int)resp.StatusCode}");
         }
 
         using var doc = JsonDocument.Parse(raw);
@@ -72,5 +75,42 @@ public sealed class OpenAiEmbeddingService : HostedEmbeddingServiceBase
         foreach (var v in values.EnumerateArray())
             arr[i++] = (float)v.GetDouble();
         return new Vector(arr);
+    }
+
+    /// <summary>
+    /// Best-effort extractor for the OpenAI JSON error envelope
+    /// (<c>error.type</c> / <c>error.code</c>). Returns the supplied
+    /// sentinel when the body isn't valid JSON or doesn't carry the
+    /// envelope. Never throws and never returns any key material.
+    /// </summary>
+    private static string ExtractErrorType(string raw)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(raw);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == JsonValueKind.Object
+                && err.TryGetProperty("type", out var t))
+                return t.GetString() ?? "unknown";
+        }
+        catch { /* fall through */ }
+        return "unknown";
+    }
+
+    private static string ExtractErrorCode(string raw)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(raw);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == JsonValueKind.Object
+                && err.TryGetProperty("code", out var c))
+            {
+                if (c.ValueKind == JsonValueKind.String) return c.GetString() ?? "unknown";
+                if (c.ValueKind == JsonValueKind.Number) return c.GetRawText();
+            }
+        }
+        catch { /* fall through */ }
+        return "unknown";
     }
 }

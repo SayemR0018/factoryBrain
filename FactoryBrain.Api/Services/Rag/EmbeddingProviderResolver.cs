@@ -150,9 +150,17 @@ public sealed class EmbeddingProviderResolver
         var active = new EmbeddingConfig("local", "hash-md5", cfg.Dims, false);
         _resolved = new EmbeddingResolution(cfg, active, Degraded: true);
 
-        _log.LogWarning(ex,
-            "Embedding provider degraded: {Reason}. configuredProvider={ConfiguredProvider} configuredDims={ConfiguredDims}; activeProvider=local.",
-            reason, cfg.Provider, cfg.Dims);
+        // Spec (48f): never log the response body or any part of a key.
+        // The exception reference argument would carry the provider's
+        // HTTP failure message — including the URL for hosted GETs, which
+        // for Gemini carries the key in the query string. We log only the
+        // exception TYPE NAME (the "error type" the operator wants) and
+        // the supplied reason; ex itself is dropped.
+        _log.LogWarning(
+            "Embedding provider degraded: {Reason} providerErrorType={ErrorType}. configuredProvider={ConfiguredProvider} configuredDims={ConfiguredDims}; activeProvider=local.",
+            reason,
+            ex?.GetType().Name ?? "unknown",
+            cfg.Provider, cfg.Dims);
     }
 
     /// <summary>
@@ -323,6 +331,19 @@ public sealed class EmbeddingProviderResolver
         }
         else
         {
+            provider = DefaultProvider;
+        }
+
+        // 1a. Stub is dev-only. Outside Development we silently swap it
+        //     for the local hash embedder so an operator who set
+        //     RAG_EMBEDDING_PROVIDER=stub in Production still gets a
+        //     working system. One warning is logged below so the
+        //     downgrade is visible in the startup log.
+        if (provider == "stub" && !_env.IsDevelopment())
+        {
+            _log.LogWarning(
+                "RAG_EMBEDDING_PROVIDER=stub ignored outside Development (ASPNETCORE_ENVIRONMENT={Env}); falling back to local hash embedder.",
+                _env.EnvironmentName);
             provider = DefaultProvider;
         }
 

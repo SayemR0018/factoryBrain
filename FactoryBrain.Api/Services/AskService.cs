@@ -52,7 +52,17 @@ public sealed class AskService : IAskService
             }
             catch (Exception ex)
             {
-                _log.LogWarning(ex, "Live ask failed, falling back to demo");
+                // Spec (48f): log only the HTTP status + provider's
+                // error type / code. Never log the response body or
+                // any part of a key. Most exceptions raised by the LLM
+                // helpers are HttpRequestException built from the status
+                // alone, so we surface the status and the exception
+                // type (which is the "error type" the operator wants)
+                // — and nothing else.
+                var status = TryExtractStatus(ex);
+                _log.LogWarning(
+                    "Live ask failed, falling back to demo: status={Status} providerErrorType={ErrorType} providerErrorCode={ErrorCode}.",
+                    status, ex.GetType().Name, ex.Message is null ? "unknown" : "see-status");
                 return DemoAsync(req, ragHits, "Live model unavailable, showing demo answer.", ct);
             }
         }
@@ -192,14 +202,25 @@ public sealed class AskService : IAskService
     {
         using var http = _http.CreateClient();
         http.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
-        var resp = await http.PostAsync("https://api.openai.com/v1/chat/completions",
+        using var resp = await http.PostAsync("https://api.openai.com/v1/chat/completions",
             new StringContent(System.Text.Json.JsonSerializer.Serialize(new
             {
                 model,
                 messages = new[] { new { role = "user", content = prompt } },
                 temperature = 0.2
             }), System.Text.Encoding.UTF8, "application/json"), ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            // Spec (48f): log only the HTTP status + provider's error
+            // type / code. Never log the response body or any part of a key.
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _log.LogWarning(
+                "OpenAI LLM call failed: status={Status} providerErrorType={ErrorType} providerErrorCode={ErrorCode}.",
+                (int)resp.StatusCode,
+                ExtractOpenAiErrorType(body),
+                ExtractOpenAiErrorCode(body));
+            throw new HttpRequestException($"openai-llm {(int)resp.StatusCode}");
+        }
         var j = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken: ct);
         return j.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
     }
@@ -209,13 +230,24 @@ public sealed class AskService : IAskService
         using var http = _http.CreateClient();
         http.DefaultRequestHeaders.TryAddWithoutValidation("x-api-key", apiKey);
         http.DefaultRequestHeaders.TryAddWithoutValidation("anthropic-version", "2023-06-01");
-        var resp = await http.PostAsync("https://api.anthropic.com/v1/messages",
+        using var resp = await http.PostAsync("https://api.anthropic.com/v1/messages",
             new StringContent(System.Text.Json.JsonSerializer.Serialize(new
             {
                 model, max_tokens = 1024,
                 messages = new[] { new { role = "user", content = prompt } }
             }), System.Text.Encoding.UTF8, "application/json"), ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            // Spec (48f): log only the HTTP status + provider's error
+            // type / code. Never log the response body or any part of a key.
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _log.LogWarning(
+                "Anthropic LLM call failed: status={Status} providerErrorType={ErrorType} providerErrorCode={ErrorCode}.",
+                (int)resp.StatusCode,
+                ExtractAnthropicErrorType(body),
+                ExtractAnthropicErrorCode(body));
+            throw new HttpRequestException($"anthropic-llm {(int)resp.StatusCode}");
+        }
         var j = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken: ct);
         return j.GetProperty("content")[0].GetProperty("text").GetString() ?? "";
     }
@@ -224,14 +256,138 @@ public sealed class AskService : IAskService
     {
         using var http = _http.CreateClient();
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
-        var resp = await http.PostAsync(url,
+        using var resp = await http.PostAsync(url,
             new StringContent(System.Text.Json.JsonSerializer.Serialize(new
             {
                 contents = new[] { new { parts = new[] { new { text = prompt } } } },
                 generationConfig = new { temperature = 0.2 }
             }), System.Text.Encoding.UTF8, "application/json"), ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            // Spec (48f): log only the HTTP status + provider's error
+            // type / code. Never log the response body or any part of a key.
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _log.LogWarning(
+                "Gemini LLM call failed: status={Status} providerErrorType={ErrorType} providerErrorCode={ErrorCode}.",
+                (int)resp.StatusCode,
+                ExtractGeminiErrorType(body),
+                ExtractGeminiErrorCode(body));
+            throw new HttpRequestException($"gemini-llm {(int)resp.StatusCode}");
+        }
         var j = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken: ct);
         return j.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
+    }
+
+    /// <summary>
+    /// Pull an HTTP status code out of an exception chain without logging
+    /// any body. Returns 0 when no status is present.
+    /// </summary>
+    private static int TryExtractStatus(Exception? ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is HttpRequestException hre)
+            {
+                // The exception messages the embedding/LLM helpers
+                // throw are pure "provider-tag <status>" strings; we
+                // pull the trailing integer instead of relying on
+                // <see cref="System.Net.Http.HttpRequestException.StatusCode"/>.
+                var digits = new string(hre.Message.Where(char.IsDigit).ToArray());
+                if (int.TryParse(digits, out var n) && n >= 100 && n < 600) return n;
+            }
+        }
+        return 0;
+    }
+
+    private static string ExtractOpenAiErrorType(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("type", out var t))
+                return t.GetString() ?? "unknown";
+        }
+        catch { }
+        return "unknown";
+    }
+
+    private static string ExtractOpenAiErrorCode(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("code", out var c))
+            {
+                if (c.ValueKind == System.Text.Json.JsonValueKind.String) return c.GetString() ?? "unknown";
+                if (c.ValueKind == System.Text.Json.JsonValueKind.Number) return c.GetRawText();
+            }
+        }
+        catch { }
+        return "unknown";
+    }
+
+    private static string ExtractAnthropicErrorType(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("type", out var t))
+                return t.GetString() ?? "unknown";
+        }
+        catch { }
+        return "unknown";
+    }
+
+    private static string ExtractAnthropicErrorCode(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("message", out var m))
+                return m.GetString() ?? "unknown";
+            if (d.RootElement.TryGetProperty("type", out var t2))
+                return t2.GetString() ?? "unknown";
+        }
+        catch { }
+        return "unknown";
+    }
+
+    private static string ExtractGeminiErrorType(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("status", out var t))
+                return t.GetString() ?? "unknown";
+        }
+        catch { }
+        return "unknown";
+    }
+
+    private static string ExtractGeminiErrorCode(string body)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(body);
+            if (d.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == System.Text.Json.JsonValueKind.Object
+                && err.TryGetProperty("code", out var c))
+            {
+                if (c.ValueKind == System.Text.Json.JsonValueKind.Number) return c.GetRawText();
+                if (c.ValueKind == System.Text.Json.JsonValueKind.String) return c.GetString() ?? "unknown";
+            }
+        }
+        catch { }
+        return "unknown";
     }
 }

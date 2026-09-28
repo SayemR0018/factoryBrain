@@ -28,11 +28,12 @@ public static class DbInitializer
         var db = scope.ServiceProvider.GetRequiredService<FactoryBrainDbContext>();
         var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
         var embedder = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
+        var admin = scope.ServiceProvider.GetRequiredService<EmbeddingColumnAdmin>();
 
         await SeedAgentsAsync(db, ct);
         await SeedPoliciesAsync(db, ct);
-        await SeedManualsAsync(db, rag, embedder, ct);
-        await SeedRmgDemoCorpusAsync(db, rag, ct);
+        await SeedManualsAsync(db, rag, embedder, admin, ct);
+        await SeedRmgDemoCorpusAsync(db, rag, admin, ct);
         await SeedLineBoardAsync(db, ct);
         await SeedSensorReadingsAsync(db, ct);
         await SeedQcDefectsAsync(db, ct);
@@ -139,7 +140,7 @@ public static class DbInitializer
 
     // --- manuals + chunks (RAG index) -----------------------------------
     private static async Task SeedManualsAsync(
-        FactoryBrainDbContext db, IRagService rag, IEmbeddingService embedder, CancellationToken ct)
+        FactoryBrainDbContext db, IRagService rag, IEmbeddingService embedder, EmbeddingColumnAdmin admin, CancellationToken ct)
     {
         if (await db.ManualDocuments.AnyAsync(ct)) return;
 
@@ -216,7 +217,25 @@ public static class DbInitializer
                 Dims              = embedder.Dimensions
             };
             var chunks = await rag.ChunkAsync(docId, s.TitleEn, s.BodyEn, s.Tags, s.Dept, s.Cat, ct);
-            foreach (var c in chunks) doc.Chunks.Add(c);
+            bool anyChunkMissing = false;
+            foreach (var c in chunks)
+            {
+                // Dimension guard: a freshly-computed vector whose length
+                // disagrees with the live column dim is dropped (chunk
+                // stored with Embedding=null, row stamped "pending"); a
+                // future reindex will fill it in.
+                c.Embedding = admin.GuardVectorDims(c.Embedding, doc);
+                if (c.Embedding is null) anyChunkMissing = true;
+                doc.Chunks.Add(c);
+            }
+            if (anyChunkMissing)
+            {
+                // Mirror the row metadata flip on the doc level too so the
+                // pending flag is consistent for /api/rag/status.
+                doc.EmbeddingProvider = "pending";
+                doc.EmbeddingModel    = "pending";
+                doc.Dims              = 0;
+            }
             db.ManualDocuments.Add(doc);
         }
         await db.SaveChangesAsync(ct);
@@ -241,7 +260,7 @@ public static class DbInitializer
     /// </para>
     /// </summary>
     private static async Task SeedRmgDemoCorpusAsync(
-        FactoryBrainDbContext db, IRagService rag, CancellationToken ct)
+        FactoryBrainDbContext db, IRagService rag, EmbeddingColumnAdmin admin, CancellationToken ct)
     {
         var seeds = new[]
         {
@@ -284,7 +303,23 @@ public static class DbInitializer
                 EmbeddingModel    = seed.ActiveModel    ?? "hash-md5",
                 Dims              = seed.ActiveDims
             };
-            foreach (var c in chunks) doc.Chunks.Add(c);
+            bool anyChunkMissing = false;
+            foreach (var c in chunks)
+            {
+                // Same dimension guard as SeedManualsAsync — a vector
+                // whose length disagrees with the live column dim is
+                // dropped and the row is flipped to "pending" so a
+                // later reindex can fill the gap.
+                c.Embedding = admin.GuardVectorDims(c.Embedding, doc);
+                if (c.Embedding is null) anyChunkMissing = true;
+                doc.Chunks.Add(c);
+            }
+            if (anyChunkMissing)
+            {
+                doc.EmbeddingProvider = "pending";
+                doc.EmbeddingModel    = "pending";
+                doc.Dims              = 0;
+            }
             db.ManualDocuments.Add(doc);
             added++;
         }

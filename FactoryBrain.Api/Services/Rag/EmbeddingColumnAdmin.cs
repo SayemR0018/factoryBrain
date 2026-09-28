@@ -69,6 +69,51 @@ public sealed class EmbeddingColumnAdmin
     public int ConfiguredDims => _resolver.Resolve().Configured.Dims;
 
     /// <summary>
+    /// Dimension guard shared by every path that writes to
+    /// <c>document_chunks.Embedding</c> (seeder, ingest, reindex). When
+    /// the freshly-computed vector does NOT match the live column dim,
+    /// the chunk is stored with <c>Embedding = null</c> and the matching
+    /// <c>ManualDocument.EmbeddingProvider</c> flipped to
+    /// <c>"pending"</c>; a warning is logged that names both the expected
+    /// and the actual dimension so an operator can see exactly where the
+    /// drift came from. A later reindex fills the gap.
+    /// </summary>
+    /// <returns>
+    /// <c>null</c> on a dim mismatch; the input vector otherwise
+    /// (unchanged). When <paramref name="applyToRow"/> is provided and we
+    /// dropped the vector, the row's metadata is also flipped to
+    /// <c>"pending"</c> so a future reindex picks it up.
+    /// </returns>
+    public Pgvector.Vector? GuardVectorDims(
+        Pgvector.Vector? vector,
+        ManualDocument? applyToRow = null)
+    {
+        if (vector is null) return null;
+        int live;
+        try
+        {
+            live = ProbeLiveColumnDim() ?? _resolver.Resolve().Configured.Dims;
+        }
+        catch
+        {
+            live = _resolver.Resolve().Configured.Dims;
+        }
+        var actual = ((float[])vector.ToArray()).Length;
+        if (actual == live) return vector;
+        var configuredDims = _resolver.Resolve().Configured.Dims;
+        _log.LogWarning(
+            "Embedding dimension mismatch: vector length={Actual} but live column dim={Live} (configuredProvider={Provider} configuredDims={Configured}). Storing chunk with Embedding=null and provider=pending; a future reindex will fill it in.",
+            actual, live, _resolver.Resolve().Configured.Provider, configuredDims);
+        if (applyToRow is not null)
+        {
+            applyToRow.EmbeddingProvider = "pending";
+            applyToRow.EmbeddingModel    = "pending";
+            applyToRow.Dims              = 0;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Read the live vector dimension of <c>document_chunks.Embedding</c>
     /// directly from <c>pg_attribute</c>. Returns <c>null</c> when the
     /// column is unsized. Throws when the table or column truly cannot be
@@ -202,7 +247,22 @@ public sealed class EmbeddingColumnAdmin
                         throw new EmbeddingProviderUnavailableException(
                             "embedding provider unavailable; reindex skipped", ex);
                     }
-                    docPlan.Chunks.Add(new ReindexChunkPlan(chunk.Id, v));
+                    // Dimension guard: a freshly-computed vector whose
+                    // length disagrees with the live column dim (or the
+                    // configured dim when the column is unsized) is
+                    // dropped here and the row's metadata is flipped to
+                    // "pending" so the next reindex run can re-try with a
+                    // different dim. The resize step above already keeps
+                    // most paths in sync; this catches the rare case
+                    // where a concurrent config flip landed between the
+                    // probe and the embed call.
+                    var guarded = GuardVectorDims(v, null);
+                    if (guarded is null)
+                    {
+                        docPlan.Chunks.Add(new ReindexChunkPlan(chunk.Id, null));
+                        continue;
+                    }
+                    docPlan.Chunks.Add(new ReindexChunkPlan(chunk.Id, guarded));
                 }
                 pending.Add(docPlan);
             }
@@ -452,7 +512,7 @@ public sealed class EmbeddingColumnAdmin
             DocId = docId; Chunks = chunks;
         }
     }
-    private sealed record ReindexChunkPlan(string ChunkId, Pgvector.Vector Vector);
+    private sealed record ReindexChunkPlan(string ChunkId, Pgvector.Vector? Vector);
 }
 
 /// <summary>Result of a reindex (and optional resize) cycle.</summary>

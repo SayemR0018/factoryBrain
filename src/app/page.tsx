@@ -35,16 +35,7 @@ export default function LandingPage() {
   });
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-canvas">
-      {/* Atmospheric layers — match the existing token vocabulary
-          (accent, stage-executing, stage-pending) so dark/light both look
-          intentional rather than marketing-cliché. */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 size-[40rem] rounded-full bg-accent/10 blur-3xl" />
-        <div className="absolute top-1/3 -right-40 size-[32rem] rounded-full bg-stage-executing/10 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 size-[28rem] rounded-full bg-stage-pending/8 blur-3xl" />
-      </div>
-
+    <div className="relative min-h-[100dvh] bg-canvas">
       {/* ---------- Top bar ---------- */}
       <header className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="BunonBrain">
@@ -65,26 +56,17 @@ export default function LandingPage() {
       </header>
 
       {/* ---------- Hero ---------- */}
-      <main className="relative z-10 px-6 md:px-12 pt-12 md:pt-20 pb-24 max-w-6xl mx-auto">
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="mono-pill text-caption text-fg-tertiary"
-        >
-          {t("landing.eyebrow")}
-        </motion.p>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-4 text-[40px] md:text-[64px] leading-[44px] md:leading-[68px] font-semibold tracking-tight"
+      <main className="relative z-10 px-6 md:px-12 pt-8 md:pt-12 pb-24 max-w-6xl mx-auto">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-10 items-start">
+        <div>
+        <h1
+          className="text-[40px] md:text-[56px] leading-[44px] md:leading-[60px] font-semibold tracking-tight max-w-[16ch]"
         >
           {t("landing.headlineLead")}
           <br />
           <span className="text-fg-secondary">{t("landing.headlineAccent")}</span>
-        </motion.h1>
+        </h1>
+        <p className="mt-4 text-caption text-fg-secondary">{t("landing.eyebrow")}</p>
 
         <motion.p
           initial={{ opacity: 0, y: 10 }}
@@ -133,11 +115,14 @@ export default function LandingPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.45, duration: 0.5 }}
-          className="mt-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface/60 px-3 py-1.5 backdrop-blur"
+          className="mt-6 inline-flex items-center gap-2 text-caption text-fg-secondary"
         >
           <span className="size-1.5 rounded-full bg-fg-tertiary" />
           <span className="text-caption text-fg-secondary">{t("landing.badge")}</span>
         </motion.div>
+        </div>
+        <SewingFloor />
+        </div>
 
         {/* ---------- Value props (BD RMG managers) ---------- */}
         <motion.section
@@ -147,7 +132,7 @@ export default function LandingPage() {
             hidden: {},
             show: { transition: { staggerChildren: 0.08, delayChildren: 0.55 } }
           }}
-          className="mt-16 grid md:grid-cols-3 gap-3"
+          className="mt-16 border-l border-border-strong pl-6 space-y-6"
         >
           {valuePropKeys.map((key, i) => {
             const Icon = valuePropIcons[i];
@@ -158,7 +143,7 @@ export default function LandingPage() {
                   hidden: { opacity: 0, y: 8 },
                   show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }
                 }}
-                className="glass p-4 rounded-md"
+                className="relative"
               >
                 <div className="flex items-center gap-2">
                   <Icon size={14} className="text-accent" />
@@ -179,14 +164,14 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.85, duration: 0.5 }}
-          className="mt-10 rounded-lg border border-border-subtle bg-surface/40 backdrop-blur p-5 md:p-6"
+          className="mt-10 surface p-5 md:p-6"
         >
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div className="max-w-xl">
-              <p className="mono-pill text-caption text-fg-tertiary">
+              <p className="text-title text-fg-primary">
                 {t("landing.socialProof.kicker")}
               </p>
-              <p className="mt-2 text-body text-fg-primary">
+              <p className="mt-2 text-body text-fg-secondary">
                 {t("landing.socialProof.body")}
               </p>
             </div>
@@ -208,15 +193,15 @@ export default function LandingPage() {
           transition={{ delay: 1.0, duration: 0.5 }}
           className="mt-12"
         >
-          <p className="mono-pill text-caption text-fg-tertiary">
+          <h2 className="text-title text-fg-primary">
             {t("landing.howItWorks.kicker")}
-          </p>
+          </h2>
           <ol className="mt-4 grid md:grid-cols-3 gap-3">
             {steps.map((step, idx) => (
-              <li key={step.title} className="glass rounded-md p-4">
+              <li key={step.title} className="surface p-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-caption text-fg-tertiary mono-pill">
-                    {String(idx + 1).padStart(2, "0")}
+                  <span className="text-caption text-fg-tertiary">
+                    {idx + 1}
                   </span>
                   <p className="text-title text-fg-primary">{step.title}</p>
                 </div>
@@ -235,7 +220,7 @@ export default function LandingPage() {
         >
           <ShieldCheck size={16} className="text-accent mt-0.5 shrink-0" />
           <div>
-            <p className="mono-pill text-caption text-fg-tertiary">
+            <p className="text-body text-fg-primary">
               {t("landing.honesty.kicker")}
             </p>
             <p className="mt-1 text-caption text-fg-secondary">
@@ -246,7 +231,7 @@ export default function LandingPage() {
       </main>
 
       {/* ---------- Footer ---------- */}
-      <footer className="relative z-10 border-t border-border-subtle bg-surface/40 backdrop-blur">
+      <footer className="relative z-10 border-t border-border-subtle">
         <div className="max-w-6xl mx-auto px-6 md:px-12 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <p className="text-caption text-fg-tertiary">
             {t("landing.footer.tagline")}
@@ -269,5 +254,35 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+/** Static sewing-floor andon. Line 3 is the slip the rest of the product already describes. */
+function SewingFloor() {
+  const rows = [
+    { id: "1", lamp: "bg-[var(--risk-low)]", label: "Running" },
+    { id: "2", lamp: "bg-[var(--risk-low)]", label: "Running" },
+    { id: "3", lamp: "bg-[var(--risk-medium)]", label: "Behind" },
+    { id: "4", lamp: "bg-[var(--risk-low)]", label: "Running" },
+    { id: "5", lamp: "bg-[var(--risk-low)]", label: "Running" },
+    { id: "6", lamp: "bg-[var(--risk-low)]", label: "Running" }
+  ];
+  return (
+    <aside className="bg-[var(--bench)] text-[var(--bench-fg)] p-5" aria-label="Sewing floor">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-body font-semibold">Sewing floor</p>
+        <p className="text-caption text-[var(--bench-muted)]">6 lines</p>
+      </div>
+      <p className="mt-1 text-caption text-[var(--bench-muted)]">Line 3 is the one to watch.</p>
+      <ol className="mt-5">
+        {rows.map((row) => (
+          <li key={row.id} className="grid grid-cols-[16px_1fr_auto] items-center gap-3 py-2 border-t border-white/10">
+            <span className={`size-2.5 rounded-full ${row.lamp}`} aria-hidden />
+            <span className="text-caption">Line {row.id}</span>
+            <span className="text-caption text-[var(--bench-muted)]">{row.label}</span>
+          </li>
+        ))}
+      </ol>
+    </aside>
   );
 }

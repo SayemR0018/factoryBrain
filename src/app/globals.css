@@ -9,29 +9,32 @@
   :root {
     color-scheme: dark;
 
-    /* Surfaces */
-    --bg-canvas: #0B0E14;
-    --bg-sidebar: #0F131B;
-    --bg-surface: #141925;
-    --bg-surface-2: #1A2030;
-    --bg-glass: rgba(20, 25, 37, 0.7);
-    --bg-overlay: rgba(0, 0, 0, 0.5);
+    /* Surfaces — neutral ink, the dark half of a Vercel/Linear dashboard. */
+    --bg-canvas: #12181E;
+    --bg-sidebar: #0E141A;
+    --bg-surface: #1A222B;
+    --bg-surface-2: #222C36;
+    --bg-glass: #141414;
+    --bg-overlay: rgba(0, 0, 0, 0.55);
 
     /* Borders + grid */
-    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-subtle: rgba(255, 255, 255, 0.1);
     --border-strong: rgba(255, 255, 255, 0.16);
-    --grid-line: rgba(255, 255, 255, 0.04);
+    --grid-line: rgba(255, 255, 255, 0.06);
 
     /* Text tiers */
-    --fg-primary: #E6E9F0;
-    --fg-secondary: #A4ACBD;
-    --fg-tertiary: #6B7388;
+    --fg-primary: #EDEDED;
+    --fg-secondary: #A1A1A1;
+    --fg-tertiary: #8D8D8D;
 
-    /* Brand + risk */
-    --accent: #7CE0C6;
-    --accent-soft: rgba(124, 224, 198, 0.18);
-    --accent-border: rgba(124, 224, 198, 0.4);
-    --accent-fg-on-bg: #04231C; /* dark text on accent green pill */
+    /* One ink accent. Status greens live on the risk tokens, not here. */
+    --accent: #E2A23A;
+    --accent-soft: rgba(226, 162, 58, 0.16);
+    --accent-border: rgba(226, 162, 58, 0.45);
+    --accent-fg-on-bg: #1B1406;
+    --bench: #1B242C;
+    --bench-fg: #E7EEF4;
+    --bench-muted: #9AABBA;
 
     --risk-low: #5BB98B;
     --risk-low-soft: rgba(91, 185, 139, 0.18);
@@ -57,15 +60,15 @@
 
     /* Button tokens — semantic pairs so fg never inherits surface.
        Bumped contrast in dark mode so labels are always legible. */
-    --btn-primary-bg: #7CE0C6;
-    --btn-primary-bg-hover: #8FE9D2;
-    --btn-primary-fg: #04231C;
+    --btn-primary-bg: #E2A23A;
+    --btn-primary-bg-hover: #F0B85A;
+    --btn-primary-fg: #1B1406;
     --btn-primary-border: transparent;
 
-    --btn-secondary-bg: #232B3F;
-    --btn-secondary-bg-hover: #2D354A;
-    --btn-secondary-fg: #E6E9F0;
-    --btn-secondary-border: rgba(255, 255, 255, 0.16);
+    --btn-secondary-bg: #1C1C1C;
+    --btn-secondary-bg-hover: #262626;
+    --btn-secondary-fg: #EDEDED;
+    --btn-secondary-border: rgba(255, 255, 255, 0.14);
 
     --btn-ghost-bg: transparent;
     --btn-ghost-bg-hover: rgba(255, 255, 255, 0.08);
@@ -100,15 +103,15 @@
     --agent-automation-bg: rgba(183, 156, 240, 0.16);
 
     /* Misc */
-    --focus-ring: #7CE0C6;
-    --selection-bg: rgba(124, 224, 198, 0.24);
+    --focus-ring: #EDEDED;
+    --selection-bg: rgba(255, 255, 255, 0.16);
 
     /* Sparkline/chart defaults */
     --chart-grid: rgba(255, 255, 255, 0.04);
     --chart-axis: rgba(255, 255, 255, 0.08);
 
     /* Constellation grid */
-    --world-dot: rgba(124, 224, 198, 0.18);
+    --world-dot: rgba(255, 255, 255, 0.12);
 
     /* Glass ingredient tokens — used by .glass, .glass-soft, .glass-strong.
        Kept here so a single tweak re-tunes every translucent surface. */
@@ -120,29 +123,32 @@
     --glass-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
   }
 
-  /* Light theme overrides — warm off-white surface + dark ink, same green (deepened) */
+  /* Light theme — cool paper, the desk half of Notion and Vercel. */
   html.light {
     color-scheme: light;
 
-    --bg-canvas: #F6F4EE;
-    --bg-sidebar: #EFEBE2;
-    --bg-surface: #FFFCF5;
-    --bg-surface-2: #EAE2D0;
-    --bg-glass: rgba(255, 252, 245, 0.7);
-    --bg-overlay: rgba(11, 14, 20, 0.45);
+    --bg-canvas: #E7EDF2;
+    --bg-sidebar: #1B242C;
+    --bg-surface: #F4F7F9;
+    --bg-surface-2: #E3E9EF;
+    --bg-glass: #FFFFFF;
+    --bg-overlay: rgba(10, 10, 10, 0.4);
 
-    --border-subtle: rgba(11, 14, 20, 0.1);
-    --border-strong: rgba(11, 14, 20, 0.22);
-    --grid-line: rgba(11, 14, 20, 0.04);
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.14);
+    --grid-line: rgba(0, 0, 0, 0.05);
 
-    --fg-primary: #14181F;
-    --fg-secondary: #3F4753;
-    --fg-tertiary: #6E7686;
+    --fg-primary: #1B242C;
+    --fg-secondary: #3E4C59;
+    --fg-tertiary: #5C6B78;
 
-    --accent: #2F8C7A;          /* darkened green for AA contrast on light surfaces */
-    --accent-soft: rgba(47, 140, 122, 0.14);
-    --accent-border: rgba(47, 140, 122, 0.4);
+    --accent: #8A5608;
+    --accent-soft: rgba(138, 86, 8, 0.12);
+    --accent-border: rgba(138, 86, 8, 0.35);
     --accent-fg-on-bg: #FFFFFF;
+    --bench: #1B242C;
+    --bench-fg: #E7EEF4;
+    --bench-muted: #9AABBA;
 
     --risk-low: #2F7F5C;
     --risk-low-soft: rgba(47, 127, 92, 0.16);
@@ -165,15 +171,15 @@
     --stage-done: #2F7F5C;
     --stage-logged: #5C6470;
 
-    --btn-primary-bg: #2F8C7A;
-    --btn-primary-bg-hover: #246D60;
+    --btn-primary-bg: #8A5608;
+    --btn-primary-bg-hover: #6E4406;
     --btn-primary-fg: #FFFFFF;
     --btn-primary-border: transparent;
 
-    --btn-secondary-bg: #EAE2D0;
-    --btn-secondary-bg-hover: #DDD3BC;
-    --btn-secondary-fg: #14181F;
-    --btn-secondary-border: rgba(11, 14, 20, 0.18);
+    --btn-secondary-bg: #FFFFFF;
+    --btn-secondary-bg-hover: #F4F4F2;
+    --btn-secondary-fg: #171717;
+    --btn-secondary-border: rgba(0, 0, 0, 0.12);
 
     --btn-ghost-bg: transparent;
     --btn-ghost-bg-hover: rgba(11, 14, 20, 0.06);
@@ -206,12 +212,12 @@
     --agent-automation: #5A3FA0;
     --agent-automation-bg: rgba(90, 63, 160, 0.14);
 
-    --focus-ring: #2F8C7A;
-    --selection-bg: rgba(47, 140, 122, 0.24);
+    --focus-ring: #171717;
+    --selection-bg: rgba(23, 23, 23, 0.12);
 
     --chart-grid: rgba(11, 14, 20, 0.05);
     --chart-axis: rgba(11, 14, 20, 0.1);
-    --world-dot: rgba(47, 140, 122, 0.18);
+    --world-dot: rgba(23, 23, 23, 0.08);
 
     --glass-alpha: 0.72;
     --glass-blur: 18px;
@@ -221,10 +227,15 @@
     --glass-shadow: 0 24px 48px rgba(20, 24, 31, 0.22);
   }
 
+  html {
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
   html, body {
     background: var(--bg-canvas);
     color: var(--fg-primary);
     font-family: Inter, "Hind Siliguri", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -262,69 +273,31 @@
   .surface {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 10px;
+    border-radius: 2px;
   }
   .surface-2 {
     background: var(--bg-surface-2);
     border: 1px solid var(--border-subtle);
-    border-radius: 10px;
+    border-radius: 2px;
   }
 
-  /* Glassmorphism: four ingredients — frost, translucency, edge highlight, depth.
-     Hover/active motion lives on transform/box-shadow (compositor-friendly),
-     never on the blur radius itself. */
+  /* Former glass surfaces are solid panels. Blur stays on overlays only. */
   .glass {
     position: relative;
-    background: var(--bg-glass);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    border-radius: 12px;
-    box-shadow:
-      var(--glass-shadow),
-      inset 0 1px 0 var(--glass-highlight),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-    transition:
-      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 220ms ease,
-      border-color 220ms ease,
-      background-color 220ms ease;
-    will-change: transform;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   }
   .glass-soft {
-    /* Lighter chrome — for chips, hover cards, inline translucent panels. */
-    background: color-mix(in srgb, var(--bg-glass), transparent 18%);
-    backdrop-filter: blur(10px) saturate(140%);
-    -webkit-backdrop-filter: blur(10px) saturate(140%);
-    border: 1px solid var(--border-subtle);
-    border-radius: 10px;
-    box-shadow:
-      0 12px 28px rgba(0, 0, 0, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transition:
-      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 220ms ease,
-      border-color 220ms ease;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
   }
   .glass-strong {
-    /* Heavier frost for modals, drawers, palette. */
-    background: var(--bg-glass);
-    backdrop-filter: blur(28px) saturate(170%);
-    -webkit-backdrop-filter: blur(28px) saturate(170%);
-    border: 1px solid var(--glass-border);
-    border-radius: 14px;
-    box-shadow:
-      0 32px 64px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 var(--glass-highlight);
-  }
-
-  .glass:hover,
-  .glass-soft:hover {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-    box-shadow:
-      0 28px 56px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 var(--glass-highlight);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
   }
 
   /* Reduced-transparency fallback — drop the frost, keep it opaque enough to read. */
@@ -353,30 +326,21 @@
     }
   }
 
-  /* Faint grain via inline SVG noise — kills the banding that heavy blur
-     produces over flat gradients. Opacity is capped well below readable. */
   .glass::after,
   .glass-soft::after,
   .glass-strong::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    opacity: 0.04;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    content: none;
   }
 
   .hairline {
     border-color: var(--border-subtle);
   }
   .mono-pill {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
+    font-family: inherit;
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
   }
   .kbd {
     font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -387,9 +351,7 @@
     border: 1px solid var(--border-subtle);
   }
   .grid-bg {
-    background-image:
-      radial-gradient(circle at 20% 10%, var(--accent-soft), transparent 40%),
-      radial-gradient(circle at 80% 80%, rgba(111, 168, 230, 0.04), transparent 40%);
+    background: var(--bg-canvas);
   }
 
   /* React Flow theming overrides — pull from CSS vars so light mode follows */
@@ -436,9 +398,7 @@
 
 /* Tiny constellation grid used by the agents canvas */
 .constellation-grid {
-  background:
-    radial-gradient(circle at 50% 45%, rgba(124, 224, 198, 0.05), transparent 55%),
-    var(--bg-canvas);
+  background: var(--bg-canvas);
 }
 
 /* Status pulse for at-risk / down brain nodes */
@@ -472,10 +432,7 @@
   will-change: transform;
 }
 .lift:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-color: var(--border-strong);
 }
 
 /* Press feedback — scale 0.97 on tap. Snappy spring is configured in JS

@@ -23,6 +23,7 @@ import { insightService } from "@/services/insight.service";
 import { useBusinessStore } from "@/store/business.store";
 import { useMounted } from "@/lib/persist";
 import { useEffect, useState } from "react";
+import { Brain3D } from "@/components/agents/Brain3D";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -33,7 +34,7 @@ export function Sidebar() {
   // Live counts for unread badges. We re-derive on a soft tick.
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    const id = setInterval(() => setTick((n) => n + 1), 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -87,20 +88,22 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="bg-sidebar h-full w-60 shrink-0 border-r border-border-subtle flex flex-col">
-      <div className="px-4 h-14 flex items-center border-b border-border-subtle">
-        <Link href="/app" className="flex items-center gap-2 group press">
-          <div className="size-6 rounded bg-[var(--accent-soft)] border border-[var(--accent-border)] flex items-center justify-center transition-colors group-hover:bg-[var(--accent-soft)]/80">
-            <div className="size-2 rounded-full bg-accent" />
-          </div>
-          <span className="text-body font-semibold tracking-tight">{t("app.name")}</span>
-        </Link>
-      </div>
+    <aside className="h-full w-[232px] shrink-0 flex flex-col bg-[var(--bench)] text-[var(--bench-fg)]">
+      <Link href="/app/agents" className="px-4 pt-4 pb-3 border-b border-white/10 flex items-center gap-3">
+        <span className="shrink-0">
+          <Brain3D size={56} />
+        </span>
+        <span>
+          <span className="block text-body font-semibold tracking-tight">{t("app.name")}</span>
+          <span className="block text-caption text-[var(--bench-muted)]">Factory Brain</span>
+        </span>
+      </Link>
 
-      <nav className="flex-1 overflow-y-auto py-3" aria-label="Primary">
+      <nav className="flex-1 overflow-y-auto py-4 relative" aria-label="Primary">
+        <div className="absolute left-[22px] top-6 bottom-6 w-px bg-white/15" aria-hidden />
         {groups.map((group) => (
-          <div key={group.label} className="px-3 mb-4">
-            <div className="mono-pill text-fg-tertiary px-2 mb-2">{group.label}</div>
+          <div key={group.label} className="px-3 mb-4 relative">
+            <div className="text-caption text-[var(--bench-muted)] px-2 mb-2 pl-6">{group.label}</div>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
@@ -111,28 +114,21 @@ export function Sidebar() {
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "group relative flex items-center gap-2.5 h-8 px-2 rounded-md text-caption",
-                        "transition-[background-color,color] duration-150",
-                        "press",
+                        "group relative flex items-center gap-2.5 h-8 pl-6 pr-2 text-caption",
+                        "transition-colors duration-150",
                         active
-                          ? "bg-surface-2 text-fg-primary"
-                          : "text-fg-secondary hover:text-fg-primary hover:bg-surface"
+                          ? "bg-white/10 text-white"
+                          : "text-[var(--bench-muted)] hover:text-white hover:bg-white/5"
                       )}
                     >
-                      {active && !reduceMotion && (
-                        <motion.span
-                          layoutId="sidebar-active"
-                          className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-accent"
-                          transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                        />
-                      )}
-                      <Icon
-                        size={15}
+                      <span
                         className={cn(
-                          "transition-colors",
-                          active ? "text-accent" : "group-hover:text-accent/80"
+                          "absolute left-[7px] size-2 rounded-full border border-[var(--bench)]",
+                          active ? "bg-[var(--accent)]" : "bg-white/30"
                         )}
+                        aria-hidden
                       />
+                      <Icon size={15} className={active ? "text-[var(--accent)]" : undefined} />
                       <span className="truncate flex-1">{item.label}</span>
                       {item.badge != null && item.badge > 0 && (
                         <motion.span
@@ -140,7 +136,7 @@ export function Sidebar() {
                           initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
                           transition={{ type: "spring", stiffness: 460, damping: 30 }}
-                          className="mono-pill text-[var(--accent-fg-on-bg)] bg-accent rounded-full px-1.5 py-0 text-[10px]"
+                          className="text-[10px] text-[var(--accent-fg-on-bg)] bg-[var(--accent)] rounded-full px-1.5"
                         >
                           {item.badge}
                         </motion.span>
@@ -154,8 +150,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-border-subtle text-caption text-fg-tertiary">
-        <div className="mono-pill text-fg-tertiary mb-1.5 px-2">{t("common.search")}</div>
+      <div className="px-3 py-3 border-t border-white/10 text-caption text-[var(--bench-muted)]">
+        <div className="mb-1.5 px-2">{t("common.search")}</div>
         <div className="px-2 flex items-center gap-2">
           <span className="kbd">⌘</span>
           <span className="kbd">K</span>

@@ -14,10 +14,10 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const reduceMotion = useReducedMotion();
   return (
     <motion.div
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
-      transition={{ duration: motionTokens.duration.page / 1000, ease: motionTokens.ease.out }}
+      initial={false}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 1 }}
+      transition={{ duration: reduceMotion ? 0 : motionTokens.duration.page / 1000, ease: motionTokens.ease.out }}
       style={{ minHeight: "100%" }}
     >
       {children}

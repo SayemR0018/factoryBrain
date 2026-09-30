@@ -19,6 +19,12 @@
       "skillPath": "skills/ascii-animation/SKILL.md",
       "computedHash": "0e4fa3f778c41e372cdcc1895fb206d0886c4fd5de221f69bfd12788920e8e3a"
     },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "899b84384f74f540ea5284d9b2e9234e050998b42eacc805410b518d4226c0b3"
+    },
     "glassmorphism": {
       "source": "iart-ai/web-animation-skills",
       "sourceType": "github",

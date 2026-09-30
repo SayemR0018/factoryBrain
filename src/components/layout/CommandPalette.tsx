@@ -111,7 +111,7 @@ export function CommandPalette() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 pt-16 md:pt-24"
+          className="fixed inset-0 z-50 bg-[var(--bg-overlay)] flex items-start justify-center p-4 pt-16 md:pt-24"
           onClick={close}
         >
           <motion.div

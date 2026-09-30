@@ -30,7 +30,9 @@ public sealed class AskService : IAskService
     {
         var provider  = _cfg["LLM_PROVIDER"] ?? Environment.GetEnvironmentVariable("LLM_PROVIDER");
         var apiKey    = _cfg["LLM_API_KEY"]  ?? Environment.GetEnvironmentVariable("LLM_API_KEY");
-        var model     = _cfg["LLM_MODEL"]    ?? Environment.GetEnvironmentVariable("LLM_MODEL") ?? "gpt-4.1-mini";
+        var model     = _cfg["LLM_MODEL"]    ?? Environment.GetEnvironmentVariable("LLM_MODEL");
+        if (string.IsNullOrWhiteSpace(model) && string.Equals(provider?.Trim(), "openai", StringComparison.OrdinalIgnoreCase))
+            model = "gpt-6-luna";
 
         var ragHits = await _rag.RetrieveAsync(req.Query, req.Filter, topK: 4, ct: ct);
 

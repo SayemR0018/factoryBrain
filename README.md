@@ -1,6 +1,6 @@
 # BunonBrain — Factory Brain
 
-> ShilpoHubBD Garment Operations AI Platform — ASP.NET Core 9 Web API + Next.js 15 React frontend.
+> Garment Operations AI Platform — ASP.NET Core 9 Web API + Next.js 15 React frontend.
 
 BunonBrain is an end-to-end operations dashboard for a mid-tier Bangladeshi garment (RMG) plant. It exposes an **AI workforce** (three agents: Line Throughput, Maintenance & Uptime, Manager Orchestrator) on top of a live **Factory Brain** graph, a synthetic sensor stream (RFID bundle scans, machine telemetry, energy meter readings), and a vision-repair loop. The current build runs on deterministic mock data so the demo works with zero external accounts. Setting `LLM_API_KEY` upgrades Ask + Agent routes to live inference.
 

@@ -39,7 +39,7 @@ export function Modal({ open, onClose, title, children, footer, className }: Pro
           animate={{ opacity: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[var(--bg-overlay)] flex items-center justify-center p-4"
           onClick={onClose}
         >
           <motion.div

@@ -35,12 +35,12 @@ export function Topbar({ onHelp }: { onHelp?: () => void }) {
   }
 
   return (
-    <header className="h-14 border-b border-border-subtle glass-soft sticky top-0 z-20 flex items-center px-4 gap-3">
+    <header className="h-14 border-b border-border-subtle bg-canvas sticky top-0 z-20 flex items-center px-4 gap-3">
       <Link
         href="/app"
         aria-label="BunonBrain home"
         data-tour="brand"
-        className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2 transition-colors press"
+        className="md:hidden inline-flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2 transition-colors press"
       >
         <BrandMark size={26} framed />
         <span className="hidden md:inline text-body font-semibold tracking-tight text-fg-primary">{t("app.name")}</span>
@@ -51,10 +51,7 @@ export function Topbar({ onHelp }: { onHelp?: () => void }) {
         onClick={open}
         aria-label={t("common.search") as string}
         data-tour="search"
-        whileHover={reduceMotion ? undefined : { y: -1 }}
-        whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-        transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        className="flex items-center gap-2 h-9 px-3 rounded-md bg-surface-2 border border-border-subtle text-fg-secondary hover:text-fg-primary hover:border-border-strong transition-colors w-72"
+        className="flex items-center gap-2 h-9 px-3 rounded-md bg-surface border border-border-subtle text-fg-secondary hover:text-fg-primary hover:border-border-strong transition-colors w-72"
       >
         <Search size={14} />
         <span className="text-caption flex-1 text-left">{t("common.search")}</span>
@@ -65,12 +62,6 @@ export function Topbar({ onHelp }: { onHelp?: () => void }) {
       <FactoryScopeChip name={factoryName} />
 
       <div className="ml-auto flex items-center gap-2">
-        <span
-          suppressHydrationWarning
-          className="text-caption text-fg-tertiary hidden sm:inline"
-        >
-          {factoryName}
-        </span>
 
         {/* Theme switcher */}
         <div

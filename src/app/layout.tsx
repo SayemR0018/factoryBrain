@@ -25,7 +25,7 @@ const themeBootstrap = `
       || window.localStorage.getItem('factoryBrain:theme')
       || window.localStorage.getItem('thalamus:theme');
     var sys = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-    var theme = stored === 'light' || stored === 'dark' ? stored : (stored === 'system' ? sys : 'dark');
+    var theme = stored === 'light' || stored === 'dark' ? stored : (stored === 'system' ? sys : 'light');
     var root = document.documentElement;
     if (theme === 'light') {
       root.classList.add('light');
@@ -40,10 +40,10 @@ const themeBootstrap = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
-        <meta name="theme-color" content="#0B0E14" />
+        <meta name="theme-color" content="#F7F7F5" />
       </head>
       <body>{children}</body>
     </html>

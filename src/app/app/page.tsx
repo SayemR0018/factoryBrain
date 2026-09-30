@@ -13,6 +13,7 @@ import { RiskBadge } from "@/components/ui/RiskBadge";
 import { Button } from "@/components/ui/Button";
 import { SimulatedPill } from "@/components/ui/Status";
 import { LineBoardPanel } from "@/components/overview/LineBoardPanel";
+import { Brain3D } from "@/components/agents/Brain3D";
 import { QcSummary } from "@/components/overview/QcSummary";
 import { BriefCard } from "@/components/overview/BriefCard";
 import { metricService } from "@/services/metric.service";
@@ -168,73 +169,25 @@ export default function OverviewPage() {
 
   return (
     <div className="px-6 md:px-8 py-6 max-w-6xl mx-auto">
-      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-        <p className="text-caption text-fg-tertiary">{greetingFor(t, name)}</p>
-        <h1 className="mt-1 text-display font-semibold tracking-tight">{name}</h1>
-      </motion.div>
+      <div className="flex items-end justify-between gap-6">
+        <div>
+          <p className="text-caption text-fg-tertiary">{greetingFor(t, name)}</p>
+          <h1 className="mt-1 text-display font-semibold tracking-tight">{name}</h1>
+        </div>
+        <Link href="/app/agents" className="hidden sm:flex flex-col items-center shrink-0">
+          <Brain3D size={88} />
+          <span className="text-caption text-fg-secondary">Factory Brain</span>
+        </Link>
+      </div>
 
-      <div
-        className="mt-4 flex flex-wrap items-center gap-2 text-caption"
-        data-tour="judge-walkthrough"
-        aria-label="Demo walkthrough"
-      >
-        <span className="mono-pill text-fg-tertiary">{t("overview.demoPathLabel")}</span>
-        <span className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-fg-secondary">
-          1. {t("overview.demoPathSimulate")}
-        </span>
-        <Link href="/app/agents" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          2. {t("overview.demoPathAgents")}
-        </Link>
-        <Link href="/app/activity" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          3. {t("overview.demoPathFloor")}
-        </Link>
-        <Link href="/app/vision" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          4. {t("overview.demoPathVision")}
-        </Link>
-        <Link href="/app/ask?q=compressor%20duty" className="mono-pill border border-border-subtle bg-surface-2 px-2 py-1 rounded-sm text-accent hover:underline">
-          5. {t("overview.demoPathAsk")}
-        </Link>
+      <div className="mt-4">
+        <LineBoardPanel />
       </div>
 
       {/* Morning brief — deterministic demo summary (no LLM). */}
       <div className="mt-4">
         <BriefCard />
       </div>
-
-      <Panel
-        className="mt-4"
-        title={t("overview.businessHealth")}
-        subtitle={t("overview.trend")}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="overview-kpis">
-          <Link href="/app/insights?filter=revenue" className="block">
-            <Metric
-              label={t("overview.revenue")}
-              value={formatBDT(health.revenue30, locale)}
-              delta={revDelta}
-              locale={locale}
-              spark={health.revenueTrend}
-            />
-          </Link>
-          <Link href="/app/insights?filter=customers" className="block">
-            <Metric
-              label={t("overview.customers")}
-              value={formatNumber(health.activeCustomers, locale)}
-              delta={custDelta}
-              locale={locale}
-            />
-          </Link>
-          <Link href="/app/insights?filter=stockout" className="block">
-            <Metric
-              label={t("overview.inventory")}
-              value={`${health.inventoryAtRisk}`}
-              delta={-0.18}
-              locale={locale}
-              note="at risk < 14d"
-            />
-          </Link>
-        </div>
-      </Panel>
 
       {/* Live sensor tick — extends the page without touching existing layout. */}
       <Panel
@@ -316,12 +269,6 @@ export default function OverviewPage() {
           </div>
         )}
       </Panel>
-
-      {/* Live line board — six lines with traffic-light bottleneck, efficiency
-          vs SAH, WIP, NPT. Auto-refreshes when the Simulate tick above fires. */}
-      <div className="mt-4">
-        <LineBoardPanel />
-      </div>
 
       <QcSummary />
 
@@ -416,6 +363,54 @@ export default function OverviewPage() {
           </div>
         </Panel>
       </div>
+
+      <Panel
+        className="mt-4"
+        title={t("overview.businessHealth")}
+        subtitle={t("overview.trend")}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="overview-kpis">
+          <Link href="/app/insights?filter=revenue" className="block">
+            <Metric
+              label={t("overview.revenue")}
+              value={formatBDT(health.revenue30, locale)}
+              delta={revDelta}
+              locale={locale}
+              spark={health.revenueTrend}
+            />
+          </Link>
+          <Link href="/app/insights?filter=customers" className="block">
+            <Metric
+              label={t("overview.customers")}
+              value={formatNumber(health.activeCustomers, locale)}
+              delta={custDelta}
+              locale={locale}
+            />
+          </Link>
+          <Link href="/app/insights?filter=stockout" className="block">
+            <Metric
+              label={t("overview.inventory")}
+              value={`${health.inventoryAtRisk}`}
+              delta={-0.18}
+              locale={locale}
+              note="at risk < 14d"
+            />
+          </Link>
+        </div>
+      </Panel>
+
+      <nav
+        className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-fg-tertiary"
+        data-tour="judge-walkthrough"
+        aria-label="Demo walkthrough"
+      >
+        <span>{t("overview.demoPathLabel")}</span>
+        <span>{t("overview.demoPathSimulate")}</span>
+        <Link href="/app/agents" className="text-fg-secondary hover:text-fg-primary">{t("overview.demoPathAgents")}</Link>
+        <Link href="/app/activity" className="text-fg-secondary hover:text-fg-primary">{t("overview.demoPathFloor")}</Link>
+        <Link href="/app/vision" className="text-fg-secondary hover:text-fg-primary">{t("overview.demoPathVision")}</Link>
+        <Link href="/app/ask?q=compressor%20duty" className="text-fg-secondary hover:text-fg-primary">{t("overview.demoPathAsk")}</Link>
+      </nav>
 
       <Panel className="mt-4" title={t("overview.recentActivity")} subtitle="">
         {activity.length === 0 ? (

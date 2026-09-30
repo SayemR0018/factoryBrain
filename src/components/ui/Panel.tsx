@@ -1,6 +1,5 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -14,12 +13,8 @@ type Props = {
 
 export function Panel({ className, children, variant = "default", title, subtitle, right }: Props) {
   const wrapper = variant === "glass" ? "glass" : "surface";
-  const reduceMotion = useReducedMotion();
   return (
-    <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+    <section
       className={cn(wrapper, className)}
     >
       {(title || right) && (
@@ -32,6 +27,6 @@ export function Panel({ className, children, variant = "default", title, subtitl
         </header>
       )}
       <div className="p-4">{children}</div>
-    </motion.section>
+    </section>
   );
 }

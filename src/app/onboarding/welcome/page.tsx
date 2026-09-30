@@ -42,7 +42,7 @@ export default function WelcomePage() {
         </h1>
 
         {/* Demo-simulated honesty chip */}
-        <p className="mt-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface/60 px-3 py-1.5 backdrop-blur text-caption text-fg-secondary">
+        <p className="mt-6 inline-flex items-center gap-2 text-caption text-fg-secondary">
           <span className="size-1.5 rounded-full bg-fg-tertiary" />
           {t("landing.badge")}
         </p>

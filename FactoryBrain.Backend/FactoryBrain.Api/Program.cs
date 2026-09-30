@@ -794,6 +794,7 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/qc/flag",
         "GET  /api/sensors/latest",
         "POST /api/sensors/ingest",
+        "POST /api/sensors/live",
         "GET  /api/sensors/ingest",
         "POST /api/vision/analyze",
         "GET  /api/vision/analyze",

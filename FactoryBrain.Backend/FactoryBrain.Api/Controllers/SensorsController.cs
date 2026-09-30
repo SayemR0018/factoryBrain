@@ -21,6 +21,14 @@ public class SensorsController : ControllerBase
     public async Task<IActionResult> Ingest([FromBody] IngestRequest? body, CancellationToken ct)
         => Ok(await _svc.IngestAsync(body ?? new IngestRequest(null), ct));
 
+    /// <summary>
+    /// Accept readings from a floor gateway. After the first successful post,
+    /// the overview poll returns this state instead of inventing a tick.
+    /// </summary>
+    [HttpPost("live")]
+    public async Task<IActionResult> Live([FromBody] LiveIngestRequest body, CancellationToken ct)
+        => Ok(await _svc.AcceptLiveAsync(body, ct));
+
     [HttpGet("ingest")]
     public async Task<IActionResult> IngestStatus(CancellationToken ct)
         => Ok(await _svc.StatusAsync(ct));

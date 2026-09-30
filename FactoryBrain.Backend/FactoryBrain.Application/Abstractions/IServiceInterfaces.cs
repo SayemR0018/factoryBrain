@@ -45,7 +45,9 @@ public interface IQcService
 
 public interface ISensorService
 {
+    bool LiveConnected { get; }
     Task<IngestResponse>  IngestAsync(IngestRequest req, CancellationToken ct);
+    Task<IngestResponse>  AcceptLiveAsync(LiveIngestRequest req, CancellationToken ct);
     Task<LatestReadingsResponse> LatestAsync(CancellationToken ct);
     Task<SimStatusResponse> StatusAsync(CancellationToken ct);
     /// <summary>Immiration from src/services/sensors.server for the sim buffer.</summary>

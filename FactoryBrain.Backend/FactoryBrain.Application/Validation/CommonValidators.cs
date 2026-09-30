@@ -33,6 +33,24 @@ public class SensorIngestValidator : AbstractValidator<IngestRequest>
     }
 }
 
+public class LiveIngestValidator : AbstractValidator<LiveIngestRequest>
+{
+    private static readonly HashSet<string> Sources = new(StringComparer.OrdinalIgnoreCase)
+        { "rfid", "telemetry", "energy" };
+
+    public LiveIngestValidator()
+    {
+        RuleFor(x => x.Readings).NotNull().NotEmpty();
+        RuleForEach(x => x.Readings).ChildRules(r =>
+        {
+            r.RuleFor(v => v.Source).NotEmpty().Must(s => Sources.Contains(s)).WithMessage("unknown_source");
+            r.RuleFor(v => v.EntityId).NotEmpty().MaximumLength(64);
+            r.RuleFor(v => v.Metric).NotEmpty().MaximumLength(64);
+            r.RuleFor(v => v.Value).Must(v => !double.IsNaN(v) && !double.IsInfinity(v));
+        });
+    }
+}
+
 public class QcFlagRequestValidator : AbstractValidator<QcFlagRequest>
 {
     // Mirrors the OPERATIONS whitelist from src/data/qc.defects.ts.

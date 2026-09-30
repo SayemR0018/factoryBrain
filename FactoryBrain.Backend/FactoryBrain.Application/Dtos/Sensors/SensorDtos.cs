@@ -1,6 +1,18 @@
 namespace FactoryBrain.Application.Dtos.Sensors;
 
-public record IngestRequest(int? Tick);
+public record IngestRequest(int? Tick, bool? Simulate = null);
+
+/// <summary>One reading from a floor device. Posted to POST /api/sensors/live.</summary>
+public record LiveReadingInput(
+    string Source,
+    string EntityId,
+    string Metric,
+    double Value,
+    string? Unit = null,
+    DateTime? Ts = null
+);
+
+public record LiveIngestRequest(IReadOnlyList<LiveReadingInput> Readings);
 
 public record IngestResponse(
     bool Simulated,

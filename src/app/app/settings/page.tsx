@@ -513,6 +513,8 @@ const PROVIDERS = [
   { value: "anthropic", labelKey: "settings.llmProviderAnthropic" }
 ] as const;
 
+const DEFAULT_OPENAI_MODEL = "gpt-6-luna";
+
 const MASKED_KEY = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
 
 function maskKey(): string {
@@ -554,7 +556,7 @@ function LlmPanel() {
       if (data.provider && ["openai", "gemini", "anthropic"].includes(data.provider)) {
         setProvider(data.provider as "openai" | "gemini" | "anthropic");
       }
-      setModel(data.model ?? "");
+      setModel(data.model ?? (!data.provider || data.provider === "openai" ? DEFAULT_OPENAI_MODEL : ""));
       setHasKey(Boolean(data.configured));
     } catch (err) {
       setStatusError("Could not load LLM status.");
@@ -689,7 +691,11 @@ function LlmPanel() {
             id="llm-provider"
             name="llm-provider"
             value={provider}
-            onChange={(e) => setProvider(e.target.value as "openai" | "gemini" | "anthropic")}
+            onChange={(e) => {
+              const next = e.target.value as "openai" | "gemini" | "anthropic";
+              setProvider(next);
+              if (next === "openai" && !model.trim()) setModel(DEFAULT_OPENAI_MODEL);
+            }}
             className="mt-1 h-9 w-full rounded-md bg-surface-2 border border-border-subtle px-2 text-body text-fg-primary focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
           >
             {PROVIDERS.map((p) => (
@@ -705,26 +711,22 @@ function LlmPanel() {
             {t("settings.llmApiKey")}
           </label>
           <p className="mt-0.5 text-caption text-fg-tertiary">{t("settings.llmApiKeyHint")}</p>
-          {/* When a key is saved we never show its content. We render a
-              masked indicator so the operator knows one exists without
-              leaking the secret anywhere in the DOM. */}
-          {hasKey && keyDraft.length === 0 ? (
-            <div className="mt-1 h-9 w-full rounded-md bg-surface-2 border border-border-subtle px-3 flex items-center justify-between">
-              <span className="text-body text-fg-primary font-mono tracking-widest">{maskKey()}</span>
-              <span className="text-caption text-risk-low">{t("settings.llmKeySaved") as string}</span>
-            </div>
-          ) : (
-            <Input
-              id="llm-api-key"
-              name="llm-api-key"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={keyDraft}
-              onChange={(e) => setKeyDraft(e.target.value)}
-              placeholder={t("settings.llmApiKeyPlaceholder") as string}
-              className="mt-1 font-mono"
-            />
+          {/* The saved key is never sent to the browser. The input stays
+              visible so a new key can replace it; the placeholder is a
+              fixed mask, not derived from the real key. */}
+          <Input
+            id="llm-api-key"
+            name="llm-api-key"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            placeholder={hasKey ? maskKey() : (t("settings.llmApiKeyPlaceholder") as string)}
+            className="mt-1 font-mono"
+          />
+          {hasKey && keyDraft.length === 0 && (
+            <p className="mt-1 text-caption text-risk-low">{t("settings.llmKeySaved") as string}</p>
           )}
           {!hasKey && !keyDraft && (
             <p className="mt-1 text-caption text-fg-tertiary">
@@ -746,7 +748,7 @@ function LlmPanel() {
             spellCheck={false}
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder={provider === "openai" ? "gpt-6-luna" : ""}
+            placeholder={provider === "openai" ? DEFAULT_OPENAI_MODEL : ""}
             className="mt-1 font-mono"
           />
         </div>

@@ -72,6 +72,8 @@ public sealed class SensorService : ISensorService
         }
     }
 
+    public bool LiveConnected => _state.Live;
+
     public SensorSimState CurrentState => new(
         _state.Tick,
         _state.Lines.Select(l => new LineBoardLine(l.Id, l.Efficiency, l.Uptime, l.EnergyKwh)).ToList(),
@@ -79,8 +81,54 @@ public sealed class SensorService : ISensorService
         _state.Readings.ToList()
     );
 
+    public async Task<IngestResponse> AcceptLiveAsync(LiveIngestRequest req, CancellationToken ct)
+    {
+        List<SensorReading> batch;
+        lock (_gate)
+        {
+            _state.Tick++;
+            _state.Live = true;
+            batch = new List<SensorReading>();
+            foreach (var input in req.Readings)
+            {
+                if (!Enum.TryParse<SensorSource>(input.Source, ignoreCase: true, out var source))
+                    continue;
+                var reading = new SensorReading
+                {
+                    Id = $"srv-sensor-{++_state.NextId}",
+                    Source = source,
+                    EntityId = input.EntityId.Trim(),
+                    Metric = input.Metric.Trim(),
+                    Value = input.Value,
+                    Unit = string.IsNullOrWhiteSpace(input.Unit) ? UnitFor(input.Metric) : input.Unit!,
+                    Ts = input.Ts?.ToUniversalTime() ?? DateTime.UtcNow,
+                    SimTick = _state.Tick
+                };
+                ApplyToFloor(reading);
+                batch.Add(reading);
+                _state.Readings.Insert(0, reading);
+            }
+            while (_state.Readings.Count > 200) _state.Readings.RemoveAt(_state.Readings.Count - 1);
+            _state.LastBatch = batch;
+        }
+
+        if (batch.Count > 0)
+        {
+            _db.SensorReadings.AddRange(batch);
+            await UpdateLineBoardAsync(batch, ct);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        var response = Snapshot(simulated: false, source: "Live — POST /api/sensors/live");
+        await _notifier.SensorReadingAsync(response, ct);
+        return response;
+    }
+
     public async Task<IngestResponse> IngestAsync(IngestRequest req, CancellationToken ct)
     {
+        if (_state.Live && req.Simulate != true)
+            return Snapshot(simulated: false, source: "Live — holding last POST /api/sensors/live readings");
+
         AdvanceSim(req.Tick);
         // Persist last batch into Postgres so the live page reflects history.
         var batch = _state.LastBatch ?? new List<SensorReading>();
@@ -90,17 +138,7 @@ public sealed class SensorService : ISensorService
             await _db.SaveChangesAsync(ct);
         }
 
-        var readings = _state.Readings.Take(50)
-            .Select(ToDto).ToList();
-
-        var response = new IngestResponse(
-            Simulated: true,
-            Source: "Simulated — no live PLC / Modbus / MQTT traffic",
-            Tick: _state.Tick,
-            Readings: readings,
-            Lines: _state.Lines.Select(l => new LineSummaryDto(l.Id, l.Efficiency, l.Uptime, l.EnergyKwh)).ToList(),
-            Machines: _state.Machines.Select(m => new MachineSummaryDto(m.Id, m.Vibration, m.Temperature, m.DutyCycle, m.Status)).ToList()
-        );
+        var response = Snapshot(simulated: true, source: "Simulated — no live PLC / Modbus / MQTT traffic");
 
         // Realtime broadcast (best-effort — the notifier swallows its own errors).
         await _notifier.SensorReadingAsync(response, ct);
@@ -118,19 +156,117 @@ public sealed class SensorService : ISensorService
             .Select(ToDto).ToList();
 
         return Task.FromResult(new LatestReadingsResponse(
-            Simulated: true,
-            Source: "Simulated — derived from server sensor ingest buffer",
+            Simulated: !_state.Live,
+            Source: _state.Live
+                ? "Live — latest accepted floor readings"
+                : "Simulated — derived from server sensor ingest buffer",
             Count: sorted.Count,
             Readings: sorted
         ));
     }
 
     public Task<SimStatusResponse> StatusAsync(CancellationToken ct)
-        => Task.FromResult(new SimStatusResponse(true,
-            "Simulated — no live PLC / Modbus / MQTT traffic",
+        => Task.FromResult(new SimStatusResponse(!_state.Live,
+            _state.Live
+                ? "Live — POST /api/sensors/live"
+                : "Simulated — no live PLC / Modbus / MQTT traffic",
             _state.Tick, _state.Readings.Count, _state.Lines.Count, _state.Machines.Count));
 
     // ----------------------------------------------------------------------
+
+    private IngestResponse Snapshot(bool simulated, string source)
+    {
+        var readings = _state.Readings.Take(50).Select(ToDto).ToList();
+        return new IngestResponse(
+            Simulated: simulated,
+            Source: source,
+            Tick: _state.Tick,
+            Readings: readings,
+            Lines: _state.Lines.Select(l => new LineSummaryDto(l.Id, l.Efficiency, l.Uptime, l.EnergyKwh)).ToList(),
+            Machines: _state.Machines.Select(m => new MachineSummaryDto(m.Id, m.Vibration, m.Temperature, m.DutyCycle, m.Status)).ToList()
+        );
+    }
+
+    private static string UnitFor(string metric) => metric switch
+    {
+        "vibration_rms" => "mm/s",
+        "temperature_c" => "°C",
+        "duty_cycle" or "efficiency" or "uptime" or "miss_rate" => "%",
+        "kwh" or "energy_kwh" => "kWh",
+        "scans_per_min" => "scans/min",
+        "wip_bundles" => "bundles",
+        _ => ""
+    };
+
+    private static void ApplyToFloor(SensorReading reading)
+    {
+        var metric = reading.Metric.ToLowerInvariant();
+        var entity = reading.EntityId;
+
+        if (entity.StartsWith("line-", StringComparison.OrdinalIgnoreCase))
+        {
+            var line = _state.Lines.FirstOrDefault(l => l.Id.Equals(entity, StringComparison.OrdinalIgnoreCase));
+            if (line is null)
+            {
+                line = new LineSim { Id = entity, Efficiency = 0.7, Uptime = 1, EnergyKwh = 0 };
+                _state.Lines.Add(line);
+            }
+            if (metric is "efficiency" or "efficiency_pct")
+                line.Efficiency = reading.Value > 1 ? reading.Value / 100.0 : reading.Value;
+            else if (metric == "uptime")
+                line.Uptime = reading.Value > 1 ? reading.Value / 100.0 : reading.Value;
+            else if (metric is "kwh" or "energy_kwh")
+                line.EnergyKwh = reading.Value;
+            else if (metric == "scans_per_min")
+                line.Efficiency = Math.Clamp(reading.Value / 22.0, 0.4, 0.98);
+        }
+        else if (reading.Source == SensorSource.Telemetry)
+        {
+            var machine = _state.Machines.FirstOrDefault(m => m.Id.Equals(entity, StringComparison.OrdinalIgnoreCase));
+            if (machine is null)
+            {
+                machine = new MachineSim { Id = entity, Status = "healthy" };
+                _state.Machines.Add(machine);
+            }
+            if (metric == "vibration_rms") machine.Vibration = Math.Clamp(reading.Value, 0, 20);
+            else if (metric == "temperature_c") machine.Temperature = Math.Clamp(reading.Value, 0, 120);
+            else if (metric == "duty_cycle") machine.DutyCycle = Math.Clamp(reading.Value > 1 ? reading.Value / 100.0 : reading.Value, 0, 1);
+            machine.Status = (machine.Vibration > 6 || machine.Temperature > 78) ? "down"
+                : (machine.Vibration > 4.5 || machine.Temperature > 70) ? "at_risk"
+                : "healthy";
+        }
+        else if (reading.Source == SensorSource.Energy && metric is "kwh" or "energy_kwh")
+        {
+            if (_state.Lines.Count > 0)
+            {
+                var share = reading.Value / _state.Lines.Count;
+                foreach (var line in _state.Lines) line.EnergyKwh = Math.Round(share, 2);
+            }
+        }
+    }
+
+    private async Task UpdateLineBoardAsync(IReadOnlyList<SensorReading> batch, CancellationToken ct)
+    {
+        foreach (var reading in batch)
+        {
+            if (!reading.EntityId.StartsWith("line-", StringComparison.OrdinalIgnoreCase)) continue;
+            var metric = reading.Metric.ToLowerInvariant();
+            if (metric is not ("efficiency" or "efficiency_pct" or "scans_per_min")) continue;
+
+            var row = await _db.LineBoardMetrics.FirstOrDefaultAsync(
+                r => r.Id == reading.EntityId, ct);
+            if (row is null) continue;
+
+            double eff = metric == "scans_per_min"
+                ? Math.Clamp(reading.Value / 22.0, 0.4, 0.98)
+                : (reading.Value > 1 ? reading.Value / 100.0 : reading.Value);
+            row.EfficiencyPct = (int)Math.Round(Math.Clamp(eff, 0, 1) * 100);
+            row.Bottleneck = row.EfficiencyPct >= 75 ? Bottleneck.Green
+                : row.EfficiencyPct >= 60 ? Bottleneck.Amber
+                : Bottleneck.Red;
+            row.UpdatedAt = DateTime.UtcNow;
+        }
+    }
 
     private static void AdvanceSim(int? tickOverride)
     {
@@ -246,10 +382,11 @@ public sealed class SensorService : ISensorService
         public List<LineSim> Lines;
         public List<MachineSim> Machines;
         public List<SensorReading> Readings;
+        public bool Live;
         public List<SensorReading>? LastBatch;
         public SimState(int tick, int nextId, List<LineSim> lines, List<MachineSim> machines,
             List<SensorReading> readings, List<SensorReading>? lastBatch)
-        { Tick = tick; NextId = nextId; Lines = lines; Machines = machines; Readings = readings; LastBatch = lastBatch; }
+        { Tick = tick; NextId = nextId; Lines = lines; Machines = machines; Readings = readings; LastBatch = lastBatch; Live = false; }
     }
     private sealed class LineSim    { public string Id = default!; public double Efficiency { get; set; } public double Uptime { get; set; } public double EnergyKwh { get; set; } }
     private sealed class MachineSim { public string Id = default!; public double Vibration { get; set; } public double Temperature { get; set; } public double DutyCycle { get; set; } public string Status { get; set; } = "healthy"; }

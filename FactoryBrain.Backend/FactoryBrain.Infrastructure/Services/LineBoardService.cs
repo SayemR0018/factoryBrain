@@ -38,9 +38,12 @@ public sealed class LineBoardService : ILineBoardService
             r.UpdatedAt
         )).ToList();
 
+        var live = _sensors.LiveConnected;
         return new LineBoardResponse(mapped, new LineBoardMeta(
-            Simulated: true,
-            Source: "Simulated — derived from FactoryBrain.Infrastructure/Services/SensorService sim buffer (no live PLC/Modbus/MQTT traffic)",
+            Simulated: !live,
+            Source: live
+                ? "Live — line efficiency updated from POST /api/sensors/live"
+                : "Simulated — derived from FactoryBrain.Infrastructure/Services/SensorService sim buffer (no live PLC/Modbus/MQTT traffic)",
             Tick: state.Tick,
             UpdatedAt: DateTime.UtcNow,
             Notes: "Deterministic per-line seed + latest server sim state. NPT grows with efficiency gap; WIP drifts on tick."
